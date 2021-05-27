@@ -3,3 +3,12 @@
 *.docx
 *.pdf
 *.xlsx
+
+.ipynb_checkpoints/
+.vscode/
+wandb/
+asset/
+__pycache__/
+models/
+output/
+models/
