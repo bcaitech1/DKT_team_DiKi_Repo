@@ -37,8 +37,8 @@ def run(args, train_data, valid_data):
 
         ### TODO: model save or early stopping
         if args.wandb:
-            wandb.log({"epoch": epoch, "train_loss": train_loss, "train_auc": train_auc, "train_acc":train_acc,
-                    "valid_auc":auc, "valid_acc":acc})
+            wandb.log({"epoch": epoch + 1, "train_loss": train_loss, "train_auc": train_auc, "train_acc":train_acc,
+                    "valid_auc":auc, "valid_acc":acc, "lr":get_lr(optimizer)})
         if auc > best_auc:
             best_auc = auc
             # torch.nn.DataParallel로 감싸진 경우 원래의 model을 가져옵니다.
@@ -72,9 +72,9 @@ def train(train_loader, model, optimizer, args):
     for step, batch in enumerate(train_loader):
         input = process_batch(batch, args)
         preds = model(input)
-        targets = input[3] # correct
+        targets = input[-4] # correct
 
-
+        
         loss = compute_loss(preds, targets)
         update_params(loss, model, optimizer, args)
 
@@ -116,7 +116,7 @@ def validate(valid_loader, model, args):
         input = process_batch(batch, args)
 
         preds = model(input)
-        targets = input[3] # correct
+        targets = input[-4] # correct
 
 
         # predictions
@@ -139,7 +139,7 @@ def validate(valid_loader, model, args):
     # Train AUC / ACC
     auc, acc = get_metric(total_targets, total_preds)
     
-    print(f'VALID AUC : {auc} ACC : {acc}\n')
+    print(f'VALID AUC : {auc} ACC : {acc}')
 
     return auc, acc, total_preds, total_targets
 
@@ -200,47 +200,42 @@ def get_model(args):
 # 배치 전처리
 def process_batch(batch, args):
 
-    test, question, tag, correct, grade, mask = batch
-    
+    cate_batch = list(batch[:len(args.n_cate_cols)])
+    numeric_batch = list(batch[len(args.n_cate_cols):-2])
+    correct, mask = batch[-2:]
     
     # change to float
     mask = mask.type(torch.FloatTensor)
     correct = correct.type(torch.FloatTensor)
-
     #  interaction을 임시적으로 correct를 한칸 우측으로 이동한 것으로 사용
     #  saint의 경우 decoder에 들어가는 input이다
     interaction = correct + 1 # 패딩을 위해 correct값에 1을 더해준다.
+    interaction = interaction * mask
     interaction = interaction.roll(shifts=1, dims=1)
     interaction[:, 0] = 0 # set padding index to the first sequence
-    interaction = (interaction * mask).to(torch.int64)
+    interaction = interaction.to(torch.int64)
     
+    # categorical features
+    for i in range(len(cate_batch)):
+        cate_batch[i] = ((cate_batch[i] + 1) * mask).to(torch.int64).to(args.device)
 
-    #  test_id, question_id, tag
-    test = ((test + 1) * mask).to(torch.int64)
-    question = ((question + 1) * mask).to(torch.int64)
-    tag = ((tag + 1) * mask).to(torch.int64)
-    grade = ((grade + 1) * mask).to(torch.int64)
+    # numeric features
+    for i in range(len(numeric_batch)):
+        numeric_batch[i] = (numeric_batch[i] * mask).to(torch.float).to(args.device)
 
     # gather index
     # 마지막 sequence만 사용하기 위한 index
     gather_index = torch.tensor(np.count_nonzero(mask, axis=1))
     gather_index = gather_index.view(-1, 1) - 1
 
-
-    # device memory로 이동
-    test = test.to(args.device)
-    question = question.to(args.device)
-    tag = tag.to(args.device)
+    # 나머지 device memory로 이동
     correct = correct.to(args.device)
-    grade = grade.to(args.device)
     mask = mask.to(args.device)
-
     interaction = interaction.to(args.device)
     gather_index = gather_index.to(args.device)
 
-    return (test, question,
-            tag, correct, grade, mask, 
-            interaction, gather_index)
+    return (*cate_batch, *numeric_batch,
+             correct, mask, interaction, gather_index)
 
 
 # loss계산하고 parameter update!
@@ -266,7 +261,7 @@ def update_params(loss, model, optimizer, args):
 
 
 def save_checkpoint(state, model_dir, model_filename):
-    print('saving model ...')
+    print('saving model ...\n')
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)    
     torch.save(state, os.path.join(model_dir, model_filename))
@@ -287,3 +282,7 @@ def load_model(args):
     
     print("Loading Model from:", model_path, "...Finished.")
     return model
+
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']

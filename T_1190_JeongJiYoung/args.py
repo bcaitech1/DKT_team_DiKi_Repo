@@ -36,7 +36,7 @@ def parse_args(mode='train'):
     parser.add_argument('--batch_size', default=64, type=int, help='batch size')
     parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
     parser.add_argument('--clip_grad', default=10, type=int, help='clip grad')
-    parser.add_argument('--patience', default=5, type=int, help='for early stopping')
+    parser.add_argument('--patience', default=1000, type=int, help='for early stopping')
     
 
     parser.add_argument('--log_steps', default=50, type=int, help='print log per n steps')
@@ -45,10 +45,11 @@ def parse_args(mode='train'):
     ### 중요 ###
     parser.add_argument('--model', default='bert', type=str, help='model type')
     parser.add_argument('--optimizer', default='adam', type=str, help='optimizer type')
-    parser.add_argument('--scheduler', default='plateau', type=str, help='scheduler type')
+    parser.add_argument('--scheduler', default='CosineAnnealingWarmRestarts', type=str, help='scheduler type')
     parser.add_argument('--wandb', action='store_true')
-
+    parser.add_argument('--name', default='', type=str)
     
+
     args = parser.parse_args()
 
     return args
