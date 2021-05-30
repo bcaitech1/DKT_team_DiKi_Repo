@@ -119,8 +119,8 @@ class Preprocess:
         df = df.merge(tmp_df, how='left', on=['userID', 'testId', 'tmp_index'])
         df['prior_elapsed'] = (df.Timestamp_x - df.Timestamp_y).dt.seconds
 
-        median = df[df['prior_elapsed'] <= 537]['prior_elapsed'].median()
-        df.loc[df['prior_elapsed'] > 537, 'prior_elapsed'] = median # 95%
+        median = df[df['prior_elapsed'] <= 260]['prior_elapsed'].median()
+        df.loc[df['prior_elapsed'] > 260, 'prior_elapsed'] = median # 95%
         df['prior_elapsed'] = df['prior_elapsed'].fillna(median)
 
         # 문제 평균 소모시간 추가
