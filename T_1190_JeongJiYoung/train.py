@@ -7,9 +7,10 @@ from dkt.utils import setSeeds
 import wandb
 
 def main(args):
-    if args.wandb: wandb.login()
+    if args.wandb:
+        wandb.login()
     
-    setSeeds(42)
+    setSeeds(args.seed)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args.device = device
 
@@ -19,7 +20,12 @@ def main(args):
     
     train_data, valid_data = preprocess.split_data(train_data)
     
-    if args.wandb: wandb.init(project='DKT', config=vars(args))
+    if args.wandb: 
+        if args.name:
+            wandb.init(project='DKT', config=vars(args), name=args.name)
+        else:
+            wandb.init(project='DKT', config=vars(args))
+            
     trainer.run(args, train_data, valid_data)
     
 

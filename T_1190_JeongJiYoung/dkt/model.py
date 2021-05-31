@@ -25,13 +25,22 @@ class Bert(nn.Module):
         # Embedding 
         # interaction은 현재 correct으로 구성되어있다. correct(1, 2) + padding(0)
         self.embedding_interaction = nn.Embedding(3, self.hidden_dim//3)
-        self.embedding_test = nn.Embedding(self.args.n_test + 1, self.hidden_dim//3) # num_embeddings->size of "dictionary" of embedding (유니크클래스+1) , embedding_dim
-        self.embedding_question = nn.Embedding(self.args.n_questions + 1, self.hidden_dim//3)
-        self.embedding_tag = nn.Embedding(self.args.n_tag + 1, self.hidden_dim//3)
-        self.embedding_grade = nn.Embedding(self.args.n_grade + 1, self.hidden_dim//3)
+
+        self.embedding_test = nn.Embedding(self.args.n_cate_cols['testId'] + 1, self.hidden_dim//3) # num_embeddings->size of "dictionary" of embedding (유니크클래스+1) , embedding_dim
+        self.embedding_question = nn.Embedding(self.args.n_cate_cols['assessmentItemID'] + 1, self.hidden_dim//3)
+        self.embedding_tag = nn.Embedding(self.args.n_cate_cols['KnowledgeTag'] + 1, self.hidden_dim//3)
+        self.embedding_grade = nn.Embedding(self.args.n_cate_cols['grade'] + 1, self.hidden_dim//3)
+        # self.embedding_prior_answerCode = nn.Embedding(self.args.n_cate_cols['prior_answerCode'] + 1, self.hidden_dim//3)
 
         # embedding combination projection
-        self.comb_proj = nn.Linear((self.hidden_dim//3)*5, self.hidden_dim)
+        self.cate_proj = nn.Linear((self.hidden_dim//3) * (len(args.n_cate_cols) + 1), self.hidden_dim)
+
+        # numeric features
+        self.embedding_numeric = nn.Linear(self.args.n_numeric, self.hidden_dim, bias=False)
+        
+        # cate + numeric
+        self.comb_proj = nn.Linear(self.hidden_dim * 2 , self.hidden_dim)
+
 
         # Bert config
         self.config = BertConfig( 
@@ -53,7 +62,8 @@ class Bert(nn.Module):
 
 
     def forward(self, input):
-        test, question, tag, _, grade, mask, interaction, _ = input
+        # prior_answerCode,
+        test, question, tag, grade, prior_elapsed, mean_elapse, test_time, _, mask, interaction, _ = input
         batch_size = interaction.size(0)
 
         # 신나는 embedding
@@ -62,12 +72,30 @@ class Bert(nn.Module):
         embed_question = self.embedding_question(question)
         embed_tag = self.embedding_tag(tag)
         embed_grade = self.embedding_grade(grade)
+        # embed_prior_answerCode = self.embedding_prior_answerCode(prior_answerCode)
 
-        embed = torch.cat([embed_interaction,
-                           embed_test,
-                           embed_question,
-                           embed_tag,
-                           embed_grade,
+        cate_embed = torch.cat([
+            embed_interaction,
+            embed_test,
+            embed_question,
+            embed_tag,
+            embed_grade,
+            # embed_prior_answerCode,
+            ], 2)
+
+        cate_embed = self.cate_proj(cate_embed)
+        
+        # 
+        prior_elapsed = prior_elapsed.contiguous().view(prior_elapsed.size(0), prior_elapsed.size(1), 1)
+        mean_elapse = mean_elapse.contiguous().view(mean_elapse.size(0), mean_elapse.size(1), 1)
+        test_time = test_time.contiguous().view(test_time.size(0), test_time.size(1), 1)
+        embedding_numeric = self.embedding_numeric(torch.cat([
+            prior_elapsed, mean_elapse, test_time
+            ], 2))
+        
+
+        embed = torch.cat([cate_embed,
+                           embedding_numeric,
                            ], 2)
 
         X = self.comb_proj(embed)
@@ -78,6 +106,7 @@ class Bert(nn.Module):
         out = out.contiguous().view(batch_size, -1, self.hidden_dim)
         out = self.fc(out)
         preds = self.activation(out).view(batch_size, -1)
+
         return preds
 
 
