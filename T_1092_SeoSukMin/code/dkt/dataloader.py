@@ -8,6 +8,8 @@ from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import torch
 
+import random
+
 class Preprocess:
     def __init__(self,args):
         self.args = args
@@ -25,13 +27,17 @@ class Preprocess:
         """
         split data into two parts with a given ratio.
         """
-        if shuffle:
-            random.seed(seed) # fix to default seed 0
-            random.shuffle(data)
+        # if shuffle:
+        #     random.seed(seed) # fix to default seed 0
+        #     random.shuffle(data)
 
-        size = int(len(data) * ratio)
-        data_1 = data[:size]
-        data_2 = data[size:]
+        # size = int(len(data) * ratio)
+        # data_1 = data[:size]
+        # data_2 = data[size:]
+
+        # 수정 (안나눠주고, dataset getitem에서 train은 마지막 row 떼고 학습예정)
+        data_1 = data
+        data_2 = data
 
         return data_1, data_2
 
@@ -40,14 +46,12 @@ class Preprocess:
         np.save(le_path, encoder.classes_)
 
     def __preprocessing(self, df, is_train = True):
-        cate_cols = ['assessmentItemID', 'testId', 'KnowledgeTag']
+        cate_cols = ['assessmentItemID', 'testId', 'KnowledgeTag', 'userIDE']
 
         if not os.path.exists(self.args.asset_dir):
             os.makedirs(self.args.asset_dir)
             
         for col in cate_cols:
-            
-            
             le = LabelEncoder()
             if is_train:
                 #For UNKNOWN class
@@ -66,21 +70,22 @@ class Preprocess:
             df[col] = test
             
 
-        def convert_time(s):
-            timestamp = time.mktime(datetime.strptime(s, '%Y-%m-%d %H:%M:%S').timetuple())
-            return int(timestamp)
+        # def convert_time(s):
+        #     timestamp = time.mktime(datetime.strptime(s, '%Y-%m-%d %H:%M:%S').timetuple())
+        #     return int(timestamp)
 
-        df['Timestamp'] = df['Timestamp'].apply(convert_time)
+        # df['Timestamp'] = df['Timestamp'].apply(convert_time)   # too slow
         
         return df
 
     def __feature_engineering(self, df):
-        #TODO
+        # TODO
+        df['userIDE'] = df['userID']
         return df
 
     def load_data_from_file(self, file_name, is_train=True):
         csv_file_path = os.path.join(self.args.data_dir, file_name)
-        df = pd.read_csv(csv_file_path)#, nrows=100000)
+        df = pd.read_csv(csv_file_path)
         df = self.__feature_engineering(df)
         df = self.__preprocessing(df, is_train)
 
@@ -90,17 +95,18 @@ class Preprocess:
         self.args.n_questions = len(np.load(os.path.join(self.args.asset_dir,'assessmentItemID_classes.npy')))
         self.args.n_test = len(np.load(os.path.join(self.args.asset_dir,'testId_classes.npy')))
         self.args.n_tag = len(np.load(os.path.join(self.args.asset_dir,'KnowledgeTag_classes.npy')))
-        
-
+        self.args.n_userIDE = len(np.load(os.path.join(self.args.asset_dir,'userIDE_classes.npy')))
 
         df = df.sort_values(by=['userID','Timestamp'], axis=0)
-        columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag']
+        columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag', 'userIDE', 'Time']
         group = df[columns].groupby('userID').apply(
                 lambda r: (
                     r['testId'].values, 
                     r['assessmentItemID'].values,
                     r['KnowledgeTag'].values,
-                    r['answerCode'].values
+                    r['answerCode'].values,
+                    r['userIDE'].values,
+                    r['Time'].values
                 )
             )
 
@@ -124,10 +130,67 @@ class DKTDataset(torch.utils.data.Dataset):
         # 각 data의 sequence length
         seq_len = len(row[0])
 
-        test, question, tag, correct = row[0], row[1], row[2], row[3]
-        
+        test, question, tag, correct, userIDE, Time = row[0], row[1], row[2], row[3], row[4], row[5]
 
-        cate_cols = [test, question, tag, correct]
+        cate_cols = [test, question, tag, correct, userIDE, Time]
+
+        # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다
+        if seq_len > self.args.max_seq_len:
+            for i, col in enumerate(cate_cols):
+                cate_cols[i] = col[-self.args.max_seq_len:]
+            mask = np.ones(self.args.max_seq_len, dtype=np.int16)
+        else:
+            mask = np.zeros(self.args.max_seq_len, dtype=np.int16)
+            mask[-seq_len:] = 1
+
+        # mask도 columns 목록에 포함시킴
+        cate_cols.append(mask)
+
+        # np.array -> torch.tensor 형변환
+        for i, col in enumerate(cate_cols):
+            cate_cols[i] = torch.tensor(col)
+
+        return cate_cols
+
+    def __len__(self):
+        return len(self.data)
+
+
+class DKTDatasetTrain(torch.utils.data.Dataset):
+    def __init__(self, data, args):
+        self.data = data
+        self.args = args
+
+    def __getitem__(self, index):
+        row = self.data[index]
+
+        # 각 data의 sequence length
+        seq_len = len(row[0])
+
+        # test, question, tag, correct = row[0], row[1], row[2], row[3]
+
+        # 마지막 항은 TEST랑 Validation에만 있도록 만들기
+        test, question, tag, correct, userIDE, Time = row[0][:-1], row[1][:-1], row[2][:-1], row[3][:-1], row[4][:-1], row[5][:-1]
+
+        # AUgmentation을 넣어주자!  -> 30% 확률로 seq_len 보다 짧은 어느 랜덤 위치에서 잘라주기
+        # 왜냐? train은 학습을 잘하는데 validation은 떨어짐, 과적합을 막기위해서 만들어줌
+        # if seq_len > 100:   # 너무 짧은 것을 자르면 좀 그러니깐 길이 100은 넘어야 자르기
+        #     if random.random() > 0.1:   # 30% 확률로 발동
+        #         # 앞쪽 자를 길이
+        #         left = int((seq_len - 80) * random.random())      # 최소 80개는 되도록 자르기
+                
+        #         # 뒤쪽 자를 길이
+        #         right = int((seq_len - left - 80) * random.random())
+
+        #         # 잘린 data
+        #         seq_len = seq_len - left - right
+        #         test = test[left: left + seq_len]
+        #         question = question[left: left + seq_len]
+        #         tag = tag[left: left + seq_len]
+        #         correct = correct[left: left + seq_len]
+        #         userIDE = userIDE[left: left + seq_len]
+
+        cate_cols = [test, question, tag, correct, userIDE, Time]
 
         # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다
         if seq_len > self.args.max_seq_len:
@@ -178,8 +241,9 @@ def get_loaders(args, train, valid):
     pin_memory = False
     train_loader, valid_loader = None, None
     
+
     if train is not None:
-        trainset = DKTDataset(train, args)
+        trainset = DKTDatasetTrain(train, args)
         train_loader = torch.utils.data.DataLoader(trainset, num_workers=args.num_workers, shuffle=True,
                             batch_size=args.batch_size, pin_memory=pin_memory, collate_fn=collate)
     if valid is not None:

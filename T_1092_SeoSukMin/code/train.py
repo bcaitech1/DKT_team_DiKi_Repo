@@ -15,10 +15,15 @@ def main(args):
     preprocess = Preprocess(args)
     preprocess.load_train_data(args.file_name)
     train_data = preprocess.get_train_data()
+
+    args.file_name = args.file_name_val
+    preprocess = Preprocess(args)
+    preprocess.load_train_data(args.file_name)
+    valid_data = preprocess.get_train_data()
     
-    train_data, valid_data = preprocess.split_data(train_data)
+    # train_data, valid_data = preprocess.split_data(train_data)
     
-    wandb.init(project='dkt', config=vars(args))
+    wandb.init(project='dkt', name=args.name, config=vars(args))
     trainer.run(args, train_data, valid_data)
     
 

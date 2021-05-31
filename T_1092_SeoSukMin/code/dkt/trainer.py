@@ -8,9 +8,13 @@ from .optimizer import get_optimizer
 from .scheduler import get_scheduler
 from .criterion import get_criterion
 from .metric import get_metric
-from .model import LSTM
+from .model import LSTM, LSTMATTN, Bert
 
 import wandb
+
+def get_lr(optimizer):
+    for param_group in optimizer.param_groups:
+        return param_group['lr']
 
 def run(args, train_data, valid_data):
     train_loader, valid_loader = get_loaders(args, train_data, valid_data)
@@ -35,9 +39,11 @@ def run(args, train_data, valid_data):
         ### VALID
         auc, acc,_ , _ = validate(valid_loader, model, args)
 
+        lr = get_lr(optimizer)
+
         ### TODO: model save or early stopping
-        wandb.log({"epoch": epoch, "train_loss": train_loss, "train_auc": train_auc, "train_acc":train_acc,
-                  "valid_auc":auc, "valid_acc":acc})
+        wandb.log({"train_loss": train_loss, "train_auc": train_auc, "train_acc":train_acc,
+                  "lr":lr, "valid_auc":auc, "valid_acc":acc})
         if auc > best_auc:
             best_auc = auc
             # torch.nn.DataParallel로 감싸진 경우 원래의 model을 가져옵니다.
@@ -46,7 +52,7 @@ def run(args, train_data, valid_data):
                 'epoch': epoch + 1,
                 'state_dict': model_to_save.state_dict(),
                 },
-                args.model_dir, 'model.pt',
+                args.model_dir, args.model_name,
             )
             early_stopping_counter = 0
         else:
@@ -58,6 +64,8 @@ def run(args, train_data, valid_data):
         # scheduler
         if args.scheduler == 'plateau':
             scheduler.step(best_auc)
+        elif args.scheduler == 'cosine_annealing_warmup_restarts':
+            scheduler.step(epoch)
         else:
             scheduler.step()
 
@@ -71,7 +79,11 @@ def train(train_loader, model, optimizer, args):
     for step, batch in enumerate(train_loader):
         input = process_batch(batch, args)
         preds = model(input)
-        targets = input[3] # correct
+
+        if args.model == 'bert__2':
+            targets = input[3][:,-1]
+        else:
+            targets = input[3] # correct
 
 
         loss = compute_loss(preds, targets)
@@ -82,7 +94,8 @@ def train(train_loader, model, optimizer, args):
         
         # predictions
         preds = preds[:,-1]
-        targets = targets[:,-1]
+        if args.model != 'bert__2':
+            targets = targets[:,-1]
 
         if args.device == 'cuda':
             preds = preds.to('cpu').detach().numpy()
@@ -170,7 +183,7 @@ def inference(args, test_data):
             
         total_preds+=list(preds)
 
-    write_path = os.path.join(args.output_dir, "output.csv")
+    write_path = os.path.join(args.output_dir, args.name+".csv")
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)    
     with open(write_path, 'w', encoding='utf8') as w:
@@ -199,7 +212,7 @@ def get_model(args):
 # 배치 전처리
 def process_batch(batch, args):
 
-    test, question, tag, correct, mask = batch
+    test, question, tag, correct, userIDE, mask = batch
     
     
     # change to float
@@ -210,14 +223,16 @@ def process_batch(batch, args):
     #    saint의 경우 decoder에 들어가는 input이다
     interaction = correct + 1 # 패딩을 위해 correct값에 1을 더해준다.
     interaction = interaction.roll(shifts=1, dims=1)
-    interaction[:, 0] = 0 # set padding index to the first sequence
-    interaction = (interaction * mask).to(torch.int64)
+    interaction_mask = mask.roll(shifts=1, dims=1)
+    interaction_mask[:, 0] = 0
+    interaction = (interaction * interaction_mask).to(torch.int64)
     # print(interaction)
     # exit()
     #  test_id, question_id, tag
     test = ((test + 1) * mask).to(torch.int64)
     question = ((question + 1) * mask).to(torch.int64)
     tag = ((tag + 1) * mask).to(torch.int64)
+    userIDE = ((userIDE + 1) * mask).to(torch.int64)
 
     # gather index
     # 마지막 sequence만 사용하기 위한 index
@@ -229,17 +244,16 @@ def process_batch(batch, args):
 
     test = test.to(args.device)
     question = question.to(args.device)
-
-
     tag = tag.to(args.device)
     correct = correct.to(args.device)
+    userIDE = userIDE.to(args.device)
     mask = mask.to(args.device)
 
     interaction = interaction.to(args.device)
     gather_index = gather_index.to(args.device)
 
     return (test, question,
-            tag, correct, mask,
+            tag, correct, userIDE, mask,
             interaction, gather_index)
 
 
@@ -253,7 +267,10 @@ def compute_loss(preds, targets):
     """
     loss = get_criterion(preds, targets)
     #마지막 시퀀드에 대한 값만 loss 계산
-    loss = loss[:,-1]
+    # loss = loss[:,-1]
+
+    # 평균을 내지만, 마지막 시퀀스가 가장 중요함으로 마지막 loss 값은 5배를 해줌
+    # loss = torch.mean(loss[:,:-1]) * 0.9 + torch.mean(loss[:,-1]) * 0.1
     loss = torch.mean(loss)
     return loss
 
