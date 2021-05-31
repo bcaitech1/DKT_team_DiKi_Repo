@@ -212,7 +212,7 @@ def get_model(args):
 # 배치 전처리
 def process_batch(batch, args):
 
-    test, question, tag, correct, userIDE, mask = batch
+    test, question, tag, correct, userIDE, Time, mask = batch
     
     
     # change to float
@@ -234,6 +234,10 @@ def process_batch(batch, args):
     tag = ((tag + 1) * mask).to(torch.int64)
     userIDE = ((userIDE + 1) * mask).to(torch.int64)
 
+    # Time = torch.from_numpy(Time * mask).float()
+    Time = (Time * mask).type(torch.FloatTensor)
+    
+
     # gather index
     # 마지막 sequence만 사용하기 위한 index
     gather_index = torch.tensor(np.count_nonzero(mask, axis=1))
@@ -247,13 +251,14 @@ def process_batch(batch, args):
     tag = tag.to(args.device)
     correct = correct.to(args.device)
     userIDE = userIDE.to(args.device)
+    Time = Time.to(args.device)
     mask = mask.to(args.device)
 
     interaction = interaction.to(args.device)
     gather_index = gather_index.to(args.device)
 
     return (test, question,
-            tag, correct, userIDE, mask,
+            tag, correct, userIDE, Time, mask,
             interaction, gather_index)
 
 

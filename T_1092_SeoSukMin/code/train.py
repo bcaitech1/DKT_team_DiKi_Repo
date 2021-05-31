@@ -24,6 +24,7 @@ def main(args):
     # train_data, valid_data = preprocess.split_data(train_data)
     
     wandb.init(project='dkt', name=args.name, config=vars(args))
+
     trainer.run(args, train_data, valid_data)
     
 

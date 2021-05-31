@@ -315,6 +315,8 @@ class Bert(nn.Module):
 
     def forward(self, input):
         test, question, tag, _, userIED, Time, mask, interaction, _ = input
+        Time = Time.view(Time.shape[0], Time.shape[1], 1)
+
         batch_size = interaction.size(0)
 
         # 신나는 embedding
