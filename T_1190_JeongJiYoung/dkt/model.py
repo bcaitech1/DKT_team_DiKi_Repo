@@ -36,7 +36,11 @@ class Bert(nn.Module):
         self.cate_proj = nn.Linear((self.hidden_dim//3) * (len(args.n_cate_cols) + 1), self.hidden_dim)
 
         # numeric features
-        self.embedding_numeric = nn.Linear(self.args.n_numeric, self.hidden_dim, bias=False)
+        # self.embedding_numeric = nn.Linear(self.args.n_numeric, self.hidden_dim, bias=False)
+        self.embedding_numeric = nn.Sequential(
+            nn.Linear(self.args.n_numeric, self.hidden_dim, bias=False),
+            # nn.LayerNorm(self.hidden_dim)
+        )
         
         # cate + numeric
         self.comb_proj = nn.Linear(self.hidden_dim * 2 , self.hidden_dim)
@@ -62,8 +66,12 @@ class Bert(nn.Module):
 
 
     def forward(self, input):
-        # prior_answerCode,
-        test, question, tag, grade, prior_elapsed, mean_elapse, test_time, _, mask, interaction, _ = input
+        # prior_answerCode, 
+        # self.num_cols = ['prior_elapsed', 'mean_elapsed', 'test_time', 'answer_delta', 'tag_delta', 'test_delta', 'assess_delta']
+
+        test, question, tag, grade, \
+        prior_elapsed, mean_elapse, test_time, answer_delta, tag_delta, test_delta, assess_delta, \
+        _, mask, interaction, _ = input
         batch_size = interaction.size(0)
 
         # 신나는 embedding
@@ -85,12 +93,19 @@ class Bert(nn.Module):
 
         cate_embed = self.cate_proj(cate_embed)
         
-        # 
-        prior_elapsed = prior_elapsed.contiguous().view(prior_elapsed.size(0), prior_elapsed.size(1), 1)
-        mean_elapse = mean_elapse.contiguous().view(mean_elapse.size(0), mean_elapse.size(1), 1)
-        test_time = test_time.contiguous().view(test_time.size(0), test_time.size(1), 1)
+        b_size = prior_elapsed.size(0) # current
+        seq_size = prior_elapsed.size(1)
+
+        prior_elapsed = prior_elapsed.contiguous().view(b_size, seq_size, 1)
+        mean_elapse = mean_elapse.contiguous().view(b_size, seq_size, 1)
+        test_time = test_time.contiguous().view(b_size, seq_size, 1)
+        answer_delta = answer_delta.contiguous().view(b_size, seq_size, 1)
+        tag_delta = tag_delta.contiguous().view(b_size, seq_size, 1)
+        test_delta = test_delta.contiguous().view(b_size, seq_size, 1)
+        assess_delta = assess_delta.contiguous().view(b_size, seq_size, 1)
+
         embedding_numeric = self.embedding_numeric(torch.cat([
-            prior_elapsed, mean_elapse, test_time
+            prior_elapsed, mean_elapse, test_time, answer_delta, tag_delta, test_delta, assess_delta
             ], 2))
         
 
