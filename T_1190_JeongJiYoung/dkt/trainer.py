@@ -255,7 +255,7 @@ def compute_loss(preds, targets):
     """
     loss = get_criterion(preds, targets)
     #마지막 시퀀드에 대한 값만 loss 계산
-    # loss = loss[:,-1]
+    loss = loss[:,-1]
     
     loss = torch.mean(loss)
     return loss
