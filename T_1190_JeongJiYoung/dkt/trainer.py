@@ -33,7 +33,7 @@ def run(args, train_data, valid_data):
         train_auc, train_acc, train_loss = train(train_loader, model, optimizer, args)
         
         ### VALID
-        auc, acc,_ , _ = validate(valid_loader, model, args)
+        auc, acc, _, _ = validate(valid_loader, model, args)
 
         ### TODO: model save or early stopping
         if args.wandb:
@@ -220,6 +220,13 @@ def process_batch(batch, args):
         cate_batch[i] = ((cate_batch[i] + 1) * mask).to(torch.int64).to(args.device)
 
     # numeric features
+    # print(len(numeric_batch))
+    # print(len(numeric_batch[4]))
+    # print(len(numeric_batch[4][0]))
+    # for i in range(3, len(numeric_batch)):
+    #     numeric_batch[i] = numeric_batch[i].roll(shifts=1,dims=1)
+    #     numeric_batch[i][:, 0] *= 0
+
     for i in range(len(numeric_batch)):
         numeric_batch[i] = (numeric_batch[i] * mask).to(torch.float).to(args.device)
 
@@ -249,6 +256,7 @@ def compute_loss(preds, targets):
     loss = get_criterion(preds, targets)
     #마지막 시퀀드에 대한 값만 loss 계산
     loss = loss[:,-1]
+    
     loss = torch.mean(loss)
     return loss
 

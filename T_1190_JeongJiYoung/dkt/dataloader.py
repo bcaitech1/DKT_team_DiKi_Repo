@@ -22,7 +22,11 @@ class Preprocess:
         ''' 
         
         self.cate_cols = ['testId', 'assessmentItemID', 'KnowledgeTag', 'grade'] # 순서유의
-        self.num_cols = ['prior_elapsed', 'mean_elapsed', 'test_time']
+        self.num_cols = ['prior_elapsed', 'mean_elapsed', 'test_time', 'answer_delta', 'tag_delta', 'test_delta', 'assess_delta']
+
+        self.train_userID = None
+        self.valid_userID = None
+
 
     def get_train_data(self):
         return self.train_data
@@ -34,10 +38,25 @@ class Preprocess:
         """
         split data into two parts with a given ratio.
         """
+        random.seed(seed) # fix to default seed 0
+
+        if self.train_userID is not None:
+            data_1 = [data[i] for i in self.train_userID]
+            data_2 = [data[i] for i in self.valid_userID]
+            
+        elif shuffle:
+            random.shuffle(data)
+            size = int(len(data) * ratio)
+            data_1 = data[:size]
+            data_2 = data[size:]
+
+        return data_1, data_2
+
+    def split_specific(self, data, ratio=0.7, shuffle=True, seed=0):
         if shuffle:
             random.seed(seed) # fix to default seed 0
             random.shuffle(data)
-        
+
         stratified = np.empty((len(data), 1))
         for i, user in enumerate(data):
             grade_mean = int(user[3].mean())
@@ -50,16 +69,36 @@ class Preprocess:
 
             last_answer = int(user[-1][-1]) 
 
-            # stratified[i] = [grade_mean, answer_mean]
-            stratified[i] = [last_answer]
+            stratified[i] = [answer_mean]
 
         data_1, data_2 = train_test_split(data, train_size=ratio, stratify=stratified)
 
-        # size = int(len(data) * ratio)
-        # data_1 = data[:size]
-        # data_2 = data[size:]
-
         return data_1, data_2
+
+    def split_hardcode(self, df, ratio=0.7, shuffle=True, seed=0):
+        
+        df['answer_mean'] = df.groupby('userID').answerCode.transform(lambda x: x.mean())
+        last_rows = df.groupby('userID').last().reset_index()
+        prob = 0.
+        used_ids = []
+        up = last_rows[last_rows.answer_mean >= 0.610425595902904].index.tolist()
+        down = last_rows[last_rows.answer_mean < 0.610425595902904].index.tolist()
+        random.seed(self.args.seed)
+        random.shuffle(up)
+        random.shuffle(down)
+        
+        for _ in range(int(len(last_rows) * (1-ratio))):
+            if prob >= 0.610425595902904:
+                user = up.pop(0)
+            else:
+                user = down.pop(0)
+            
+            used_ids.append(user)
+            prob = last_rows.iloc[used_ids].answer_mean.mean()
+
+        self.valid_userID = used_ids
+        self.train_userID = up + down
+    
 
     def __save_labels(self, encoder, name):
         le_path = os.path.join(self.args.asset_dir, name + '_classes.npy')
@@ -99,6 +138,9 @@ class Preprocess:
         return df
 
     def __feature_engineering(self, df):
+        
+        self.split_hardcode(df, ratio=0.7, seed=self.args.seed)
+
         #TODO
         # 대분류 추가
         df['grade'] = df['testId'].str[2]
@@ -116,8 +158,9 @@ class Preprocess:
         df['tmp_index'] = df.index
         tmp_df = df[['userID', 'testId', 'Timestamp', 'tmp_index']].shift(1)
         tmp_df['tmp_index'] += 1
+        tmp_df = tmp_df.rename(columns={'Timestamp':'prior_timestamp'})
         df = df.merge(tmp_df, how='left', on=['userID', 'testId', 'tmp_index'])
-        df['prior_elapsed'] = (df.Timestamp_x - df.Timestamp_y).dt.seconds
+        df['prior_elapsed'] = (df.Timestamp - df.prior_timestamp).dt.seconds
 
         upper_bound = df['prior_elapsed'].quantile(0.98)
         median = df[df['prior_elapsed'] <= upper_bound]['prior_elapsed'].median()
@@ -139,6 +182,63 @@ class Preprocess:
         df['mean_elapsed'] = np.log1p(df['mean_elapsed'])
         df['test_time'] = np.log1p(df['test_time'])
 
+        ### ShinChanHo
+        def percentile(s):
+            return np.sum(s) / len(s)
+            
+        # 큰 카테고리
+        df['big_features'] = df['testId'].str[2].astype(int)
+
+        # 큰 카테고리별 정답률
+        stu_groupby = df.groupby('big_features').agg({
+            'assessmentItemID': 'count',
+            'answerCode': percentile
+        }).rename(columns = {'answerCode' : 'answer_rate'})
+
+        # tag별 정답률
+        stu_tag_groupby = df.groupby(['big_features', 'KnowledgeTag']).agg({
+            'assessmentItemID': 'count',
+            'answerCode': percentile
+        }).rename(columns = {'answerCode' : 'answer_rate'})
+
+        # 시험지별 정답률
+        stu_test_groupby = df.groupby(['big_features', 'testId']).agg({
+            'assessmentItemID': 'count',
+            'answerCode': percentile
+        }).rename(columns = {'answerCode' : 'answer_rate'})
+                                                                    
+        # 문항별 정답률
+        stu_assessment_groupby = df.groupby(['big_features', 'assessmentItemID']).agg({
+            'assessmentItemID': 'count',
+            'answerCode': percentile
+        }).rename(columns = {'assessmentItemID' : 'assessment_count', 'answerCode' : 'answer_rate'})
+
+        df = df.sort_values(by=['userID','Timestamp'], axis=0)
+
+        # 정답 - 큰 카테고리별 정답률 
+        '''ex)
+        맞은 문제의 큰 카테고리별 정답률이 0.7 이면 1 - 0.7 = 0.3이 됨)
+        틀린 문제의 큰 카테고리별 정답률이 0.7 이면 0 - 0.7 = -0.7이 됨)
+        '''
+        temp = pd.merge(df, stu_groupby.reset_index()[['big_features', 'answer_rate']], on = ['big_features'])
+        temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
+        df['answer_delta'] = temp['answer_rate']
+
+        # 정답 - 태그별 정답률
+        temp = pd.merge(df, stu_tag_groupby.reset_index()[['answer_rate', 'KnowledgeTag']], on = ['KnowledgeTag'])
+        temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
+        df['tag_delta'] = temp['answer_rate']
+
+        # 정답 - 시험별 정답률
+        temp = pd.merge(df, stu_test_groupby.reset_index()[['answer_rate', 'testId']], on = ['testId'])
+        temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
+        df['test_delta'] = temp['answer_rate']
+
+        # 정답 - 문항별 정답률
+        temp = pd.merge(df, stu_assessment_groupby.reset_index()[['answer_rate', 'assessmentItemID']], on = ['assessmentItemID'])
+        temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
+        df['assess_delta'] = temp['answer_rate']
+
         return df
 
     def load_data_from_file(self, file_name, is_train=True):
@@ -155,7 +255,7 @@ class Preprocess:
             self.args.n_cate_cols[cate_col] = len(np.load(os.path.join(self.args.asset_dir, f'{cate_col}_classes.npy')))
         self.args.n_numeric = len(self.num_cols) # 수치형은 한번에 처리
 
-        df = df.sort_values(by=['userID','Timestamp_x'], axis=0)
+        df = df.sort_values(by=['userID','Timestamp'], axis=0)
 
         group = df.groupby('userID').apply(
                 lambda r: [
