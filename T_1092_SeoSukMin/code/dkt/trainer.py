@@ -8,7 +8,7 @@ from .optimizer import get_optimizer
 from .scheduler import get_scheduler
 from .criterion import get_criterion
 from .metric import get_metric
-from .model import LSTM, LSTMATTN, Bert
+from .model import LSTM, LSTMATTN, Bert, GPT2
 
 import wandb
 
@@ -202,6 +202,7 @@ def get_model(args):
     if args.model == 'lstm': model = LSTM(args)
     if args.model == 'lstmattn': model = LSTMATTN(args)
     if args.model == 'bert': model = Bert(args)
+    if args.model == 'gpt2': model = GPT2(args)
     
 
     model.to(args.device)
@@ -212,7 +213,7 @@ def get_model(args):
 # 배치 전처리
 def process_batch(batch, args):
 
-    test, question, tag, correct, userIDE, Time, mask = batch
+    test, question, tag, correct, userIDE, Time_take, mask = batch
     
     
     # change to float
@@ -235,7 +236,7 @@ def process_batch(batch, args):
     userIDE = ((userIDE + 1) * mask).to(torch.int64)
 
     # Time = torch.from_numpy(Time * mask).float()
-    Time = (Time * mask).type(torch.FloatTensor)
+    Time_take = (Time_take * mask).type(torch.FloatTensor)
     
 
     # gather index
@@ -251,14 +252,14 @@ def process_batch(batch, args):
     tag = tag.to(args.device)
     correct = correct.to(args.device)
     userIDE = userIDE.to(args.device)
-    Time = Time.to(args.device)
+    Time_take = Time_take.to(args.device)
     mask = mask.to(args.device)
 
     interaction = interaction.to(args.device)
     gather_index = gather_index.to(args.device)
 
     return (test, question,
-            tag, correct, userIDE, Time, mask,
+            tag, correct, userIDE, Time_take, mask,
             interaction, gather_index)
 
 
@@ -275,8 +276,8 @@ def compute_loss(preds, targets):
     # loss = loss[:,-1]
 
     # 평균을 내지만, 마지막 시퀀스가 가장 중요함으로 마지막 loss 값은 5배를 해줌
-    # loss = torch.mean(loss[:,:-1]) * 0.9 + torch.mean(loss[:,-1]) * 0.1
-    loss = torch.mean(loss)
+    loss = torch.mean(loss[:,:-1]) * 0.9 + torch.mean(loss[:,-1]) * 0.1
+    # loss = torch.mean(loss)
     return loss
 
 def update_params(loss, model, optimizer, args):

@@ -69,7 +69,7 @@ class Preprocess:
             test = le.transform(df[col])
             df[col] = test
             
-
+        # df['time_shift'] = df['time']
         # def convert_time(s):
         #     timestamp = time.mktime(datetime.strptime(s, '%Y-%m-%d %H:%M:%S').timetuple())
         #     return int(timestamp)
@@ -81,6 +81,13 @@ class Preprocess:
     def __feature_engineering(self, df):
         # TODO
         df['userIDE'] = df['userID']
+        df['Time_shift'] = df['Time'][1:].tolist() + [-1]
+        df['Time_take'] = df['Time_shift'] - df['Time']
+        k = df['userID'][1:]
+        k = k.append(pd.Series([-1]))
+        k = k.reset_index(drop=True)
+        df.loc[df['userID'] != k, 'Time_take'] = -1000
+
         return df
 
     def load_data_from_file(self, file_name, is_train=True):
@@ -98,7 +105,7 @@ class Preprocess:
         self.args.n_userIDE = len(np.load(os.path.join(self.args.asset_dir,'userIDE_classes.npy')))
 
         df = df.sort_values(by=['userID','Timestamp'], axis=0)
-        columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag', 'userIDE', 'Time']
+        columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag', 'userIDE', 'Time_take']
         group = df[columns].groupby('userID').apply(
                 lambda r: (
                     r['testId'].values, 
@@ -106,7 +113,7 @@ class Preprocess:
                     r['KnowledgeTag'].values,
                     r['answerCode'].values,
                     r['userIDE'].values,
-                    r['Time'].values
+                    r['Time_take'].values
                 )
             )
 
@@ -130,9 +137,9 @@ class DKTDataset(torch.utils.data.Dataset):
         # 각 data의 sequence length
         seq_len = len(row[0])
 
-        test, question, tag, correct, userIDE, Time = row[0], row[1], row[2], row[3], row[4], row[5]
+        test, question, tag, correct, userIDE, Time_take = row[0], row[1], row[2], row[3], row[4], row[5]
 
-        cate_cols = [test, question, tag, correct, userIDE, Time]
+        cate_cols = [test, question, tag, correct, userIDE, Time_take]
 
         # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다
         if seq_len > self.args.max_seq_len:
@@ -170,27 +177,29 @@ class DKTDatasetTrain(torch.utils.data.Dataset):
         # test, question, tag, correct = row[0], row[1], row[2], row[3]
 
         # 마지막 항은 TEST랑 Validation에만 있도록 만들기
-        test, question, tag, correct, userIDE, Time = row[0][:-1], row[1][:-1], row[2][:-1], row[3][:-1], row[4][:-1], row[5][:-1]
+        test, question, tag, correct, userIDE, Time_take = row[0], row[1], row[2], row[3], row[4], row[5]
 
         # AUgmentation을 넣어주자!  -> 30% 확률로 seq_len 보다 짧은 어느 랜덤 위치에서 잘라주기
         # 왜냐? train은 학습을 잘하는데 validation은 떨어짐, 과적합을 막기위해서 만들어줌
-        # if seq_len > 100:   # 너무 짧은 것을 자르면 좀 그러니깐 길이 100은 넘어야 자르기
-        #     if random.random() > 0.1:   # 30% 확률로 발동
-        #         # 앞쪽 자를 길이
-        #         left = int((seq_len - 80) * random.random())      # 최소 80개는 되도록 자르기
+        if seq_len > self.args.max_seq_len + 30:   # 너무 짧은 것을 자르면 좀 그러니깐 길이 100은 넘어야 자르기
+            if random.random() > 0.4:   # 30% 확률로 발동
+                # 앞쪽 자를 길이
+                # left = int((seq_len - 80) * random.random())      # 최소 80개는 되도록 자르기
+                left = 0
                 
-        #         # 뒤쪽 자를 길이
-        #         right = int((seq_len - left - 80) * random.random())
+                # 뒤쪽 자를 길이
+                right = int((seq_len - left - self.args.max_seq_len + 3) * random.random())
 
-        #         # 잘린 data
-        #         seq_len = seq_len - left - right
-        #         test = test[left: left + seq_len]
-        #         question = question[left: left + seq_len]
-        #         tag = tag[left: left + seq_len]
-        #         correct = correct[left: left + seq_len]
-        #         userIDE = userIDE[left: left + seq_len]
+                # 잘린 data
+                seq_len = seq_len - left - right
+                test = test[left: left + seq_len]
+                question = question[left: left + seq_len]
+                tag = tag[left: left + seq_len]
+                correct = correct[left: left + seq_len]
+                userIDE = userIDE[left: left + seq_len]
+                Time_take = Time_take[left: left + seq_len -1] + [-1000]
 
-        cate_cols = [test, question, tag, correct, userIDE, Time]
+        cate_cols = [test, question, tag, correct, userIDE, Time_take]
 
         # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다
         if seq_len > self.args.max_seq_len:
