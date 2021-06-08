@@ -66,11 +66,11 @@ class Bert(nn.Module):
 
 
     def forward(self, input):
-        # prior_answerCode, 
-        # self.num_cols = ['prior_elapsed', 'mean_elapsed', 'test_time', 'answer_delta', 'tag_delta', 'test_delta', 'assess_delta']
 
         test, question, tag, grade, \
-        prior_elapsed, mean_elapse, test_time, answer_delta, tag_delta, test_delta, assess_delta, \
+        prior_elapsed, mean_elapse, test_time, grade_time, \
+        answer_delta, tag_delta, test_delta, assess_delta, \
+        tag_cumAnswer, \
         _, mask, interaction, _ = input
         batch_size = interaction.size(0)
 
@@ -96,18 +96,19 @@ class Bert(nn.Module):
         b_size = prior_elapsed.size(0) # current
         seq_size = prior_elapsed.size(1)
 
-        prior_elapsed = prior_elapsed.contiguous().view(b_size, seq_size, 1)
-        mean_elapse = mean_elapse.contiguous().view(b_size, seq_size, 1)
-        test_time = test_time.contiguous().view(b_size, seq_size, 1)
-        answer_delta = answer_delta.contiguous().view(b_size, seq_size, 1)
-        tag_delta = tag_delta.contiguous().view(b_size, seq_size, 1)
-        test_delta = test_delta.contiguous().view(b_size, seq_size, 1)
-        assess_delta = assess_delta.contiguous().view(b_size, seq_size, 1)
+        prior_elapsed = prior_elapsed.view(b_size, seq_size, 1)
+        mean_elapse = mean_elapse.view(b_size, seq_size, 1)
+        test_time = test_time.view(b_size, seq_size, 1)
+        answer_delta = answer_delta.view(b_size, seq_size, 1)
+        tag_delta = tag_delta.view(b_size, seq_size, 1)
+        test_delta = test_delta.view(b_size, seq_size, 1)
+        assess_delta = assess_delta.view(b_size, seq_size, 1)
+        grade_time = grade_time.view(b_size, seq_size, 1)
+        tag_cumAnswer = tag_cumAnswer.view(b_size, seq_size, 1)
 
         embedding_numeric = self.embedding_numeric(torch.cat([
-            prior_elapsed, mean_elapse, test_time, answer_delta, tag_delta, test_delta, assess_delta
+            prior_elapsed, mean_elapse, test_time, answer_delta, tag_delta, test_delta, assess_delta, grade_time, tag_cumAnswer
             ], 2))
-        
 
         embed = torch.cat([cate_embed,
                            embedding_numeric,
