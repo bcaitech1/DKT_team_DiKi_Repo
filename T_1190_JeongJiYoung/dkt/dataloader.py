@@ -268,7 +268,7 @@ class Preprocess:
         else:
             extra_file_name = self.args.file_name
         extra_userID = None 
-        # df, extra_userID = self.add_extra_df(df, extra_file_name)
+        df, extra_userID = self.add_extra_df(df, extra_file_name)
 
         # FE
         df = self.__feature_engineering(df)
@@ -301,10 +301,9 @@ class Preprocess:
     def load_test_data(self, file_name):
         self.test_data = self.load_data_from_file(file_name, is_train= False)
 
-    def add_extra_df(df, file_name):
-        extra_file_path = os.path.join(self.args.data_dir, extra_file_name)
+    def add_extra_df(self, df, file_name):
+        extra_file_path = os.path.join(self.args.data_dir, file_name)
         extra_df = pd.read_csv(extra_file_path, parse_dates=['Timestamp'])
-        extra_df['userID'] += df['userID'].max() + 1
         extra_userID = extra_df.userID.unique()
         df = pd.concat((df, extra_df))
         return df, extra_userID
