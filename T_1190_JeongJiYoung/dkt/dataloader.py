@@ -9,6 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import torch
 from sklearn.model_selection import GroupShuffleSplit, train_test_split
+from sklearn.preprocessing import QuantileTransformer
 
 class Preprocess:
     def __init__(self,args):
@@ -22,7 +23,11 @@ class Preprocess:
         ''' 
         
         self.cate_cols = ['testId', 'assessmentItemID', 'KnowledgeTag', 'grade'] # 순서유의
-        self.num_cols = ['prior_elapsed', 'mean_elapsed', 'test_time', 'answer_delta', 'tag_delta', 'test_delta', 'assess_delta']
+        self.num_cols = [
+            'prior_elapsed', 'mean_elapsed', 'test_time', 'grade_time', # 시간
+            'answer_delta', 'tag_delta', 'test_delta', 'assess_delta', # 정답률
+            'tag_cumAnswer'
+            ]
 
         self.train_userID = None
         self.valid_userID = None
@@ -89,9 +94,9 @@ class Preprocess:
         
         for _ in range(int(len(last_rows) * (1-ratio))):
             if prob >= 0.610425595902904:
-                user = up.pop(0)
+                user = up.pop()
             else:
-                user = down.pop(0)
+                user = down.pop()
             
             used_ids.append(user)
             prob = last_rows.iloc[used_ids].answer_mean.mean()
@@ -138,21 +143,17 @@ class Preprocess:
         return df
 
     def __feature_engineering(self, df):
-        
-        self.split_hardcode(df, ratio=0.7, seed=self.args.seed)
-
-        #TODO
         # 대분류 추가
         df['grade'] = df['testId'].str[2]
 
         # 마지막 문제 이전 응답 (있을 때만)
-        last_assess = df.groupby(['userID']).assessmentItemID.last().reset_index()
-        same_with_last = df.merge(last_assess, how='inner', on=['userID', 'assessmentItemID'])
-        second_back = same_with_last[['userID', 'assessmentItemID', 'answerCode']].groupby(['userID', 'assessmentItemID']).apply(lambda x: x.iloc[-2] if len(x) > 1 else None).dropna()
-        second_back = second_back.reset_index(drop=True)
-        second_back = second_back.rename(columns={'answerCode': 'prior_answerCode'})
-        second_back = second_back.drop(columns=['assessmentItemID'])
-        df = df.merge(second_back, how='left', on=['userID'])
+        # last_assess = df.groupby(['userID']).assessmentItemID.last().reset_index()
+        # same_with_last = df.merge(last_assess, how='inner', on=['userID', 'assessmentItemID'])
+        # second_back = same_with_last[['userID', 'assessmentItemID', 'answerCode']].groupby(['userID', 'assessmentItemID']).apply(lambda x: x.iloc[-2] if len(x) > 1 else None).dropna()
+        # second_back = second_back.reset_index(drop=True)
+        # second_back = second_back.rename(columns={'answerCode': 'prior_answerCode'})
+        # second_back = second_back.drop(columns=['assessmentItemID'])
+        # df = df.merge(second_back, how='left', on=['userID'])
 
         # 이전 문제 소모시간 추가
         df['tmp_index'] = df.index
@@ -162,10 +163,13 @@ class Preprocess:
         df = df.merge(tmp_df, how='left', on=['userID', 'testId', 'tmp_index'])
         df['prior_elapsed'] = (df.Timestamp - df.prior_timestamp).dt.seconds
 
-        upper_bound = df['prior_elapsed'].quantile(0.98)
-        median = df[df['prior_elapsed'] <= upper_bound]['prior_elapsed'].median()
-        df.loc[df['prior_elapsed'] > upper_bound, 'prior_elapsed'] = median
-        df['prior_elapsed'] = df['prior_elapsed'].fillna(median)
+        upper_bound = df['prior_elapsed'].quantile(0.98) # outlier 설정
+        median = df[df['prior_elapsed'] <= upper_bound]['prior_elapsed'].median() 
+        df.loc[df['prior_elapsed'] > upper_bound, 'prior_elapsed'] = median 
+        df['prior_elapsed'] = df['prior_elapsed'].fillna(median) # 빈값 채우기
+
+        df['prior_elapsed'] = np.log1p(df['prior_elapsed']) #
+        df['prior_elapsed'] = QuantileTransformer(output_distribution='normal').fit_transform(df.prior_elapsed.values.reshape(-1,1)).reshape(-1) 
 
         # 문제 평균 소모시간 추가
         assess_time = df.groupby('assessmentItemID').prior_elapsed.mean()
@@ -177,10 +181,24 @@ class Preprocess:
         test_time.name = 'test_time'
         df = df.merge(test_time, how='left', on=['testId'])
 
+        # 대분류별 평균 소모시간 추가
+        grade_time = df.groupby('grade').prior_elapsed.mean()
+        grade_time.name = 'grade_time'
+        df = df.merge(grade_time, how='left', on=['grade'])
+
         # 수치형 로그
-        df['prior_elapsed'] = np.log1p(df['prior_elapsed'])
-        df['mean_elapsed'] = np.log1p(df['mean_elapsed'])
-        df['test_time'] = np.log1p(df['test_time'])
+        # df['mean_elapsed'] = np.log1p(df['mean_elapsed'])
+        # df['test_time'] = np.log1p(df['test_time'])
+        # df['grade_time'] = np.log1p(df['grade_time'])
+
+        # user&태그별 누적 카운트
+        # df['tag_cumCount'] = df.groupby(['userID', 'KnowledgeTag']).cumcount()
+        # df['tag_cumCount'] = np.log1p(df['tag_cumCount'])
+
+        # user&태그별 누적 정답횟수
+        df['tag_cumAnswer'] = df.groupby(['userID', 'KnowledgeTag']).answerCode.cumsum() - df['answerCode']
+        df['tag_cumAnswer'] = np.log1p(df['tag_cumAnswer'])
+
 
         ### ShinChanHo
         def percentile(s):
@@ -189,64 +207,75 @@ class Preprocess:
         # 큰 카테고리
         df['big_features'] = df['testId'].str[2].astype(int)
 
+        # 마지막 row, answerCode -1 는 제외한 후 평균을 계산한다.
+        minus_answerCode = df[df['answerCode'] == -1].index
+        cal_df = df.drop(index=minus_answerCode)
+
         # 큰 카테고리별 정답률
-        stu_groupby = df.groupby('big_features').agg({
+        stu_groupby = cal_df.groupby('big_features').agg({
             'assessmentItemID': 'count',
             'answerCode': percentile
         }).rename(columns = {'answerCode' : 'answer_rate'})
 
         # tag별 정답률
-        stu_tag_groupby = df.groupby(['big_features', 'KnowledgeTag']).agg({
+        stu_tag_groupby = cal_df.groupby(['KnowledgeTag']).agg({
             'assessmentItemID': 'count',
             'answerCode': percentile
         }).rename(columns = {'answerCode' : 'answer_rate'})
 
         # 시험지별 정답률
-        stu_test_groupby = df.groupby(['big_features', 'testId']).agg({
+        stu_test_groupby = cal_df.groupby(['testId']).agg({
             'assessmentItemID': 'count',
             'answerCode': percentile
         }).rename(columns = {'answerCode' : 'answer_rate'})
                                                                     
         # 문항별 정답률
-        stu_assessment_groupby = df.groupby(['big_features', 'assessmentItemID']).agg({
+        stu_assessment_groupby = cal_df.groupby(['assessmentItemID']).agg({
             'assessmentItemID': 'count',
             'answerCode': percentile
         }).rename(columns = {'assessmentItemID' : 'assessment_count', 'answerCode' : 'answer_rate'})
-
-        df = df.sort_values(by=['userID','Timestamp'], axis=0)
 
         # 정답 - 큰 카테고리별 정답률 
         '''ex)
         맞은 문제의 큰 카테고리별 정답률이 0.7 이면 1 - 0.7 = 0.3이 됨)
         틀린 문제의 큰 카테고리별 정답률이 0.7 이면 0 - 0.7 = -0.7이 됨)
         '''
-        temp = pd.merge(df, stu_groupby.reset_index()[['big_features', 'answer_rate']], on = ['big_features'])
-        temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
-        df['answer_delta'] = temp['answer_rate']
+        df = df.merge(stu_groupby.reset_index()[['big_features', 'answer_rate']], on=['big_features'])
+        df = df.rename(columns={'answer_rate':'answer_delta'})
 
         # 정답 - 태그별 정답률
-        temp = pd.merge(df, stu_tag_groupby.reset_index()[['answer_rate', 'KnowledgeTag']], on = ['KnowledgeTag'])
-        temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
-        df['tag_delta'] = temp['answer_rate']
+        df = df.merge(stu_tag_groupby.reset_index()[['answer_rate', 'KnowledgeTag']], on=['KnowledgeTag'])
+        df = df.rename(columns={'answer_rate':'tag_delta'})
 
         # 정답 - 시험별 정답률
-        temp = pd.merge(df, stu_test_groupby.reset_index()[['answer_rate', 'testId']], on = ['testId'])
-        temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
-        df['test_delta'] = temp['answer_rate']
+        df = df.merge(stu_test_groupby.reset_index()[['answer_rate', 'testId']], on=['testId'])
+        df = df.rename(columns={'answer_rate':'test_delta'})
 
         # 정답 - 문항별 정답률
-        temp = pd.merge(df, stu_assessment_groupby.reset_index()[['answer_rate', 'assessmentItemID']], on = ['assessmentItemID'])
-        temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
-        df['assess_delta'] = temp['answer_rate']
+        df = df.merge(stu_assessment_groupby.reset_index()[['answer_rate', 'assessmentItemID']], on=['assessmentItemID'])
+        df = df.rename(columns={'answer_rate':'assess_delta'})
 
         return df
 
     def load_data_from_file(self, file_name, is_train=True):
         csv_file_path = os.path.join(self.args.data_dir, file_name)
-        df = pd.read_csv(csv_file_path, parse_dates=['Timestamp'])#, nrows=100000)
+        df = pd.read_csv(csv_file_path, parse_dates=['Timestamp'])
 
+        # 다른 data set까지 포함시킨 평균 계산을 위해 추가
+        if is_train:
+            self.split_hardcode(df, ratio=0.8, seed=self.args.seed) # 미리 split
+            extra_file_name = self.args.test_file_name
+        else:
+            extra_file_name = self.args.file_name
+        extra_userID = None 
+        # df, extra_userID = self.add_extra_df(df, extra_file_name)
 
+        # FE
         df = self.__feature_engineering(df)
+        # extra_df 드롭
+        if extra_userID is not None:
+            df = df[~df['userID'].isin(extra_userID)]
+        # Category encoding
         df = self.__preprocessing(df, is_train)
 
         # 추후 feature를 embedding할 시에 embedding_layer의 input 크기를 결정할때 사용
@@ -256,7 +285,6 @@ class Preprocess:
         self.args.n_numeric = len(self.num_cols) # 수치형은 한번에 처리
 
         df = df.sort_values(by=['userID','Timestamp'], axis=0)
-
         group = df.groupby('userID').apply(
                 lambda r: [
                     *[r[cate_col].values for cate_col in self.cate_cols],
@@ -272,6 +300,13 @@ class Preprocess:
 
     def load_test_data(self, file_name):
         self.test_data = self.load_data_from_file(file_name, is_train= False)
+
+    def add_extra_df(self, df, file_name):
+        extra_file_path = os.path.join(self.args.data_dir, file_name)
+        extra_df = pd.read_csv(extra_file_path, parse_dates=['Timestamp'])
+        extra_userID = extra_df.userID.unique()
+        df = pd.concat((df, extra_df))
+        return df, extra_userID
 
 
 class DKTDataset(torch.utils.data.Dataset):
