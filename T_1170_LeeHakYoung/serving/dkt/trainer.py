@@ -247,14 +247,7 @@ def inference(args, test_data):
             
         total_preds+=list(preds)
 
-    write_path = os.path.join(args.output_dir, "output.csv")
-    if not os.path.exists(args.output_dir):
-        os.makedirs(args.output_dir)    
-    with open(write_path, 'w', encoding='utf8') as w:
-        print("writing prediction : {}".format(write_path))
-        w.write("id,prediction\n")
-        for id, p in enumerate(total_preds):
-            w.write('{},{}\n'.format(id,p))
+    return 100*sum(total_preds)/len(total_preds)
 
 
 
@@ -341,7 +334,6 @@ def compute_loss(preds, targets, index):
     loss = get_criterion(preds, targets)
     # loss = torch.gather(loss, 1, index)
     loss = torch.mean(loss)
-    # loss = torch.mean(loss[:,:-1]) * 0.9 + torch.mean(loss[:,-1]) * 0.1
 
     return loss
 

@@ -81,7 +81,6 @@ class Preprocess:
         
         # 큰 카테고리
         df['big_features'] = df['testId'].apply(lambda x : x[2]).astype(int)
-        df['grade'] = df['testId'].str[2]
 
         # 큰 카테고리별 정답률
         stu_groupby = df.groupby('big_features').agg({
@@ -160,22 +159,12 @@ class Preprocess:
         df['mean_elapsed'] = np.log1p(df['mean_elapsed'])
         df['test_time'] = np.log1p(df['test_time'])
 
-        # fe4 추가 feature
-        # 대분류별 평균 소모시간 추가
-        grade_time = df.groupby('grade').prior_elapsed.mean()
-        grade_time.name = 'grade_time'
-        df = df.merge(grade_time, how='left', on=['grade'])
-
-        # user&태그별 누적 정답횟수
-        df['tag_cumAnswer'] = df.groupby(['userID', 'KnowledgeTag']).answerCode.cumsum() - df['answerCode']
-        df['tag_cumAnswer'] = np.log1p(df['tag_cumAnswer'])
-
-
         return df
 
     def load_data_from_file(self, file_name, is_train=True):
-        csv_file_path = os.path.join(self.args.data_dir, file_name)
-        df = pd.read_csv(csv_file_path, parse_dates=['Timestamp'])
+        df = file_name
+        # csv_file_path = os.path.join(self.args.data_dir, file_name)
+        # df = pd.read_csv(csv_file_path, parse_dates=['Timestamp'])
         df = self.__feature_engineering(df)
         df = self.__preprocessing(df, is_train)
 
@@ -192,7 +181,7 @@ class Preprocess:
 
         df = df.sort_values(by=['userID','Timestamp'], axis=0)
         columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag', 'big_features', 'answer_delta', 'tag_delta', 'test_delta', 'assess_delta',
-        'prior_elapsed', 'mean_elapsed', 'test_time', 'grade_time', 'tag_cumAnswer']
+        'prior_elapsed', 'mean_elapsed', 'test_time']
         group = df[columns].groupby('userID').apply(
                 lambda r: (
                     r['testId'].values, 
@@ -206,9 +195,7 @@ class Preprocess:
                     r['assess_delta'].values,
                     r['prior_elapsed'].values,
                     r['mean_elapsed'].values,
-                    r['test_time'].values,
-                    r['grade_time'].values,
-                    r['tag_cumAnswer'].values
+                    r['test_time'].values
                 )
             )
 
@@ -232,11 +219,11 @@ class DKTDataset(torch.utils.data.Dataset):
         # 각 data의 sequence length
         seq_len = len(row[0])
 
-        test, question, tag, correct, big_features, answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time, grade_time, tag_cumAnswer = row
+        test, question, tag, correct, big_features, answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time = row
         
         # category변수와 continuout변수를 나눠줌        
         cate_cols = [test, question, tag, correct, big_features]
-        cont_cols = [answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time, grade_time, tag_cumAnswer]
+        cont_cols = [answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time]
 
         # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다
         if seq_len > self.args.max_seq_len:
@@ -387,3 +374,128 @@ def data_augmentation(data, args):
         data = slidding_window(data, args)
 
     return data
+
+
+# pseudo labeling
+class PseudoLabel:
+    def __init__(self, trainer):
+        self.trainer = trainer
+        
+        # 결과 저장용
+        self.models =[]
+        self.preds =[]
+        self.valid_aucs =[]
+        self.valid_accs =[]
+
+    def visualize(self):
+        aucs = self.valid_aucs
+        accs = self.valid_accs
+
+        N = len(aucs)
+        auc_min = min(aucs)
+        auc_max = max(aucs)
+        acc_min = min(accs)
+        acc_max = max(accs)
+
+        experiment = ['base'] + [f'pseudo {i + 1}' for i in range(N - 1)]
+        df = pd.DataFrame({'experiment': experiment, 'auc': aucs, 'acc': accs})
+
+        import matplotlib.pyplot as plt
+
+        fig, ax1 = plt.subplots(figsize=(5 + N, 7))
+
+        ax1.set_title('AUC of Pseudo Label Training Process', fontsize=16)
+
+        # Time
+        plt.bar(df['experiment'],
+                df['auc'],
+                color='red',
+                width=-0.3, align='edge',
+                label='AUC')
+        plt.ylabel('AUC (Area Under the ROC Curve)')
+        ax1.set_ylim(auc_min - 0.002, auc_max + 0.002)
+        ax1.axhline(y=aucs[0], color='r', linewidth=1)
+        ax1.legend(loc=2)
+
+        # AUC
+        ax2 = ax1.twinx()
+        plt.bar(df['experiment'],
+                df['acc'],
+                color='blue',
+                width=0.3, align='edge',
+                label='ACC')
+        plt.ylabel('ACC (Accuracy)')
+
+        ax2.grid(False)
+        ax2.set_ylim(acc_min - 0.002, acc_max + 0.002)
+        ax2.axhline(y=accs[0], color='b', linewidth=1)
+        ax2.legend(loc=1)
+
+        plt.show()
+
+    def train(self, args, train_data, valid_data):
+        model = self.trainer.train(args, train_data, valid_data)
+
+        # model 저장
+        self.models.append(model)
+        
+        return model
+
+    def validate(self, args, model, valid_data):
+        valid_target = self.trainer.get_target(valid_data)
+        valid_predict = self.trainer.evaluate(args, model, valid_data)
+
+        # Metric
+        valid_auc, valid_acc = get_metric(valid_target, valid_predict)
+
+        # auc / acc 저장
+        self.valid_aucs.append(valid_auc)
+        self.valid_accs.append(valid_acc)
+
+        print(f'Valid AUC : {valid_auc} Valid ACC : {valid_acc}')
+
+    def test(self, args, model, test_data):
+        test_predict = self.trainer.test(args, model, test_data)
+        self.preds.append(test_predict)
+        pseudo_labels = np.where(test_predict >= 0.5, 1, 0)
+        
+        return pseudo_labels
+
+    def update_train_data(self, pseudo_labels, train_data, test_data):
+        # pseudo 라벨이 담길 test 데이터 복사본
+        pseudo_test_data = copy.deepcopy(test_data)
+
+        # pseudo label 테스트 데이터 update
+        for test_data, pseudo_label in zip(pseudo_test_data, pseudo_labels):
+            test_data[-1][-1] = pseudo_label
+
+        # train data 업데이트
+        pseudo_train_data = np.concatenate((train_data, pseudo_test_data))
+
+        return pseudo_train_data
+
+    def run(self, N, args, train_data, valid_data, test_data):
+        """
+        N은 두번째 과정을 몇번 반복할지 나타낸다.
+        즉, pseudo label를 이용한 training 횟수를 가리킨다.
+        """
+        if N < 1:
+            raise ValueError(f"N must be bigger than 1, currently {N}")
+            
+        # BONUS: 모델 불러오기 기능 추가
+        # 별도로 관련 정답 코드는 제공되지 
+        
+        # pseudo label training을 위한 준비 단계
+        print("Preparing for pseudo label process")
+        model = self.train(args, train_data, valid_data)
+        self.validate(args, model, valid_data)
+        pseudo_labels = self.test(args, model, test_data)
+        pseudo_train_data = self.update_train_data(pseudo_labels, train_data, test_data)
+
+        # pseudo label training 원하는 횟수만큼 반복
+        for i in range(N):
+            print(f'Pseudo Label Training Process {i + 1}')
+            model = self.train(args, pseudo_train_data, valid_data)
+            self.validate(args, model, valid_data)
+            pseudo_labels = self.test(args, model, test_data)
+            pseudo_train_data = self.update_train_data(pseudo_labels, train_data, test_data)
