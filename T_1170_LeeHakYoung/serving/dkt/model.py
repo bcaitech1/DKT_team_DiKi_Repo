@@ -38,7 +38,7 @@ class Bert(nn.Module):
 
         # cont features
         self.cont_embed = nn.Sequential(
-            nn.Linear(9, self.hidden_dim//2),
+            nn.Linear(7, self.hidden_dim//2),
             nn.LayerNorm(self.hidden_dim//2)
         )
 
@@ -801,7 +801,7 @@ class GPT2(nn.Module):
 
         # cont features
         self.cont_embed = nn.Sequential(
-            nn.Linear(9, self.hidden_dim//2),
+            nn.Linear(7, self.hidden_dim//2),
             nn.LayerNorm(self.hidden_dim//2)
         )
 

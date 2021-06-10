@@ -2,7 +2,6 @@ import os
 import torch
 import numpy as np
 
-
 from .dataloader import get_loaders
 from .optimizer import get_optimizer
 from .scheduler import get_scheduler
@@ -24,6 +23,7 @@ def run(args, train_data, valid_data):
     scheduler = get_scheduler(optimizer, args)
 
     best_auc = -1
+    with_acc = -1
     early_stopping_counter = 0
     for epoch in range(args.n_epochs):
 
@@ -41,6 +41,7 @@ def run(args, train_data, valid_data):
                     "valid_auc":auc, "valid_acc":acc, "lr":get_lr(optimizer)})
         if auc > best_auc:
             best_auc = auc
+            with_acc = acc
             # torch.nn.DataParallel로 감싸진 경우 원래의 model을 가져옵니다.
             model_to_save = model.module if hasattr(model, 'module') else model
             save_checkpoint({
@@ -61,6 +62,10 @@ def run(args, train_data, valid_data):
             scheduler.step(best_auc)
         else:
             scheduler.step()
+    
+    wandb.log({"best_auc":best_auc, "with_acc":with_acc})
+    wandb.finish()
+
 
 
 def train(train_loader, model, optimizer, args):
