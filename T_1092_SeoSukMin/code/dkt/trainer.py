@@ -1,6 +1,7 @@
 import os
 import torch
 import numpy as np
+from torch._C import device
 
 
 from .dataloader import get_loaders
@@ -84,12 +85,12 @@ def train(train_loader, model, optimizer, args):
 
         loss = compute_loss(preds, targets)
 
-        # l2_lambda = 0.01
-        # l2_reg = torch.tensor(0.)
+        # l2_lambda = 0.0001
+        # l2_reg = torch.tensor(0.).to(args.device)
         # for param in model.parameters():
         #     l2_reg += torch.norm(param)
         # loss += l2_lambda * l2_reg
-
+        
         update_params(loss, model, optimizer, args)
 
         if step % args.log_steps == 0:
@@ -285,8 +286,8 @@ def compute_loss(preds, targets):
     # loss = loss[:,-1]
 
     # 평균을 내지만, 마지막 시퀀스가 가장 중요함으로 마지막 loss 값은 5배를 해줌
-    loss = torch.mean(loss[:,:-1]) * 0.9 + torch.mean(loss[:,-1]) * 0.1
-    # loss = torch.mean(loss)
+    # loss = torch.mean(loss[:,:-1]) * 0.9 + torch.mean(loss[:,-1]) * 0.1
+    loss = torch.mean(loss)
     return loss
 
 def update_params(loss, model, optimizer, args):

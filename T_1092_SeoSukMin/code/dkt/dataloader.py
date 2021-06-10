@@ -309,14 +309,14 @@ class DKTDatasetTrain(torch.utils.data.Dataset):
        
         # AUgmentation을 넣어주자!  -> 30% 확률로 seq_len 보다 짧은 어느 랜덤 위치에서 잘라주기
         # 왜냐? train은 학습을 잘하는데 validation은 떨어짐, 과적합을 막기위해서 만들어줌
-        if seq_len > 50:   # 너무 짧은 것을 자르면 좀 그러니깐 길이 100은 넘어야 자르기
+        if seq_len > self.args.max_seq_len:   # 너무 짧은 것을 자르면 좀 그러니깐 길이 100은 넘어야 자르기
             if random.random() > 0.4:   # 30% 확률로 발동
                 # 앞쪽 자를 길이
-                left = int((seq_len - 50) * random.random())      # 최소 80개는 되도록 자르기
-                # left = 0
+                left = int((seq_len - 80) * random.random())      # 최소 80개는 되도록 자르기
+                left = 0
                 
                 # 뒤쪽 자를 길이
-                right = int((seq_len - left - 30) * random.random())
+                right = int((seq_len - left - 80) * random.random())
 
                 # 잘린 data
                 seq_len = seq_len - left - right

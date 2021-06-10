@@ -19,10 +19,10 @@ def parse_args(mode='train'):
     
     parser.add_argument('--model_dir', default='models/', type=str, help='model directory')
     # parser.add_argument('--model_name', default='lstm.pt', type=str, help='model file name')
-    parser.add_argument('--model_name', default='lastQ.pt', type=str, help='model file name')
+    parser.add_argument('--model_name', default='gpt2.pt', type=str, help='model file name')
     # parser.add_argument('--model_name', default='lstm_attn.pt', type=str, help='model file name')
 
-    parser.add_argument('--name', default='lastQ_Fe12_Hi64_SQ128_lossAddC_cutaugLRS', type=str, help='model file name')
+    parser.add_argument('--name', default='GPT2_Fe12_Hi64_SQ128_lossAll_cutaugR', type=str, help='model file name')
     # parser.add_argument('--name', default='bert_seqeunce20', type=str, help='model file name')
     # parser.add_argument('--name', default='lstm_attn', type=str, help='model file name')
 
@@ -60,7 +60,7 @@ def parse_args(mode='train'):
 
     ### 중요 ###
     # parser.add_argument('--model', default='lstm', type=str, help='model type')
-    parser.add_argument('--model', default='lastQ', type=str, help='model type')
+    parser.add_argument('--model', default='gpt2', type=str, help='model type')
     # parser.add_argument('--model', default='lstmattn', type=str, help='model type')
     # parser.add_argument('--optimizer', default='adam', type=str, help='optimizer type')
     parser.add_argument('--optimizer', default='adamW', type=str, help='optimizer type')
