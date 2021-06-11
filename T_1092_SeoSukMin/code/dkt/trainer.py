@@ -1,6 +1,7 @@
 import os
 import torch
 import numpy as np
+from torch._C import device
 
 
 from .dataloader import get_loaders
@@ -8,7 +9,7 @@ from .optimizer import get_optimizer
 from .scheduler import get_scheduler
 from .criterion import get_criterion
 from .metric import get_metric
-from .model import LSTM, LSTMATTN, Bert
+from .model import LSTM, LSTMATTN, Bert, GPT2, LastQuery
 
 import wandb
 
@@ -80,13 +81,16 @@ def train(train_loader, model, optimizer, args):
         input = process_batch(batch, args)
         preds = model(input)
 
-        if args.model == 'bert__2':
-            targets = input[3][:,-1]
-        else:
-            targets = input[3] # correct
-
+        targets = input[0][3] # correct
 
         loss = compute_loss(preds, targets)
+
+        # l2_lambda = 0.0001
+        # l2_reg = torch.tensor(0.).to(args.device)
+        # for param in model.parameters():
+        #     l2_reg += torch.norm(param)
+        # loss += l2_lambda * l2_reg
+        
         update_params(loss, model, optimizer, args)
 
         if step % args.log_steps == 0:
@@ -94,8 +98,7 @@ def train(train_loader, model, optimizer, args):
         
         # predictions
         preds = preds[:,-1]
-        if args.model != 'bert__2':
-            targets = targets[:,-1]
+        targets = targets[:,-1]
 
         if args.device == 'cuda':
             preds = preds.to('cpu').detach().numpy()
@@ -128,7 +131,7 @@ def validate(valid_loader, model, args):
         input = process_batch(batch, args)
 
         preds = model(input)
-        targets = input[3] # correct
+        targets = input[0][3] # correct
 
 
         # predictions
@@ -202,6 +205,8 @@ def get_model(args):
     if args.model == 'lstm': model = LSTM(args)
     if args.model == 'lstmattn': model = LSTMATTN(args)
     if args.model == 'bert': model = Bert(args)
+    if args.model == 'gpt2': model = GPT2(args)
+    if args.model == 'lastQ': model = LastQuery(args)
     
 
     model.to(args.device)
@@ -212,12 +217,15 @@ def get_model(args):
 # 배치 전처리
 def process_batch(batch, args):
 
-    test, question, tag, correct, userIDE, Time, mask = batch
+    (test, question, tag, correct, big_features, mask), cont_features = batch  
     
     
     # change to float
     mask = mask.type(torch.FloatTensor)
     correct = correct.type(torch.FloatTensor)
+    big_features = big_features.type(torch.FloatTensor)
+
+    temp = []
 
     #  interaction을 임시적으로 correct를 한칸 우측으로 이동한 것으로 사용
     #    saint의 경우 decoder에 들어가는 input이다
@@ -232,34 +240,37 @@ def process_batch(batch, args):
     test = ((test + 1) * mask).to(torch.int64)
     question = ((question + 1) * mask).to(torch.int64)
     tag = ((tag + 1) * mask).to(torch.int64)
-    userIDE = ((userIDE + 1) * mask).to(torch.int64)
-
-    # Time = torch.from_numpy(Time * mask).float()
-    Time = (Time * mask).type(torch.FloatTensor)
+    big_features = (big_features * mask).to(torch.int64)
     
-
     # gather index
     # 마지막 sequence만 사용하기 위한 index
     gather_index = torch.tensor(np.count_nonzero(mask, axis=1))
     gather_index = gather_index.view(-1, 1) - 1
 
+    # interaction과 동일하게 rolling을 해서 이전 정보를 사용할 수 있도록 함
+    for cont_feature in cont_features:
+        cont_feature = cont_feature.type(torch.FloatTensor)
+        cont_feature = cont_feature.roll(shifts=1, dims=1)
+        cont_feature[:, 0] = 0
+        cont_feature = (cont_feature * interaction_mask).unsqueeze(-1)
+        temp.append(cont_feature)
 
     # device memory로 이동
-
     test = test.to(args.device)
     question = question.to(args.device)
     tag = tag.to(args.device)
     correct = correct.to(args.device)
-    userIDE = userIDE.to(args.device)
-    Time = Time.to(args.device)
     mask = mask.to(args.device)
-
     interaction = interaction.to(args.device)
+    big_features = big_features.to(args.device)
     gather_index = gather_index.to(args.device)
 
+    # 연속형 변수들을 concat해줌
+    cont_features = torch.cat(temp, dim=-1).to(args.device)
+
     return (test, question,
-            tag, correct, userIDE, Time, mask,
-            interaction, gather_index)
+            tag, correct, mask,
+            interaction, big_features, gather_index), cont_features
 
 
 # loss계산하고 parameter update!
@@ -286,7 +297,6 @@ def update_params(loss, model, optimizer, args):
     optimizer.zero_grad()
 
 
-
 def save_checkpoint(state, model_dir, model_filename):
     print('saving model ...')
     if not os.path.exists(model_dir):
@@ -296,8 +306,6 @@ def save_checkpoint(state, model_dir, model_filename):
 
 
 def load_model(args):
-    
-    
     model_path = os.path.join(args.model_dir, args.model_name)
     print("Loading Model from:", model_path)
     load_state = torch.load(model_path)
@@ -305,7 +313,6 @@ def load_model(args):
 
     # 1. load model state
     model.load_state_dict(load_state['state_dict'], strict=True)
-   
     
     print("Loading Model from:", model_path, "...Finished.")
     return model
