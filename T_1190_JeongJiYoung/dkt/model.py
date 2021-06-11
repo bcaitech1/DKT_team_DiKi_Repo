@@ -69,7 +69,8 @@ class Bert(nn.Module):
 
         test, question, tag, grade, \
         prior_elapsed, mean_elapse, test_time, grade_time, \
-        answer_delta, tag_delta, test_delta, assess_delta, \
+        answer_delta, \
+        tag_delta, test_delta, assess_delta, \
         tag_cumAnswer, \
         _, mask, interaction, _ = input
         batch_size = interaction.size(0)
@@ -103,11 +104,17 @@ class Bert(nn.Module):
         tag_delta = tag_delta.view(b_size, seq_size, 1)
         test_delta = test_delta.view(b_size, seq_size, 1)
         assess_delta = assess_delta.view(b_size, seq_size, 1)
+        # big_tag_delta = big_tag_delta.view(b_size, seq_size, 1)
+        # big_test_delta = big_test_delta.view(b_size, seq_size, 1)
+        # big_assess_delta = big_assess_delta.view(b_size, seq_size, 1)
         grade_time = grade_time.view(b_size, seq_size, 1)
         tag_cumAnswer = tag_cumAnswer.view(b_size, seq_size, 1)
 
         embedding_numeric = self.embedding_numeric(torch.cat([
-            prior_elapsed, mean_elapse, test_time, answer_delta, tag_delta, test_delta, assess_delta, grade_time, tag_cumAnswer
+            prior_elapsed, mean_elapse, test_time, answer_delta, 
+            tag_delta, test_delta, assess_delta, 
+            # big_tag_delta, big_test_delta, big_assess_delta, 
+            grade_time, tag_cumAnswer
             ], 2))
 
         embed = torch.cat([cate_embed,

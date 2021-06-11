@@ -48,6 +48,8 @@ def parse_args(mode='train'):
     parser.add_argument('--scheduler', default='CosineAnnealingWarmRestarts', type=str, help='scheduler type')
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--name', default='', type=str)
+    parser.add_argument('--kfold5', action='store_true')
+
     
 
     args = parser.parse_args()

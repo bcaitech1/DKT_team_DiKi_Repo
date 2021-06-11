@@ -5,6 +5,8 @@ from dkt import trainer
 import torch
 from dkt.utils import setSeeds
 import wandb
+from sklearn.model_selection import KFold
+
 
 def main(args):
     if args.wandb:
@@ -18,16 +20,25 @@ def main(args):
     preprocess.load_train_data(args.file_name)
     train_data = preprocess.get_train_data()
     
-    train_data, valid_data = preprocess.split_data(train_data)
-    
     if args.wandb: 
         if args.name:
             wandb.init(project='DKT', config=vars(args), name=args.name)
         else:
             wandb.init(project='DKT', config=vars(args))
-            
-    trainer.run(args, train_data, valid_data)
+
+    # kfold 5
+    if args.kfold5:
+        kf = KFold(5, shuffle=True, random_state=args.seed)
+        k = 0
+        for train_i, valid_i in kf.split(train_data):
+            k +=1
+            train_d, valid_d = preprocess.split_index(train_data, train_i, valid_i)
+            trainer.run(args, train_d, valid_d, str(k))
+    else:
+        train_data, valid_data = preprocess.split_data(train_data)
+        trainer.run(args, train_data, valid_data)
     
+    if args.wandb: wandb.finish()
 
 if __name__ == "__main__":
     args = parse_args(mode='train')
