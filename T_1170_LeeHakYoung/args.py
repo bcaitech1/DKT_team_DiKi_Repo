@@ -35,8 +35,8 @@ def parse_args(mode='train'):
 
     # 훈련
     config['n_epochs'] = 100
-    config['batch_size'] = 64
-    config['lr'] = 0.0001
+    config['batch_size'] = 16
+    config['lr'] = 0.00005
     config['clip_grad'] = 10
 
     # inference
