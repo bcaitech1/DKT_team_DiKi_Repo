@@ -250,6 +250,7 @@ def process_batch(batch, args):
     # interaction과 동일하게 rolling을 해서 이전 정보를 사용할 수 있도록 함
     for cont_feature in cont_features:
         cont_feature = cont_feature.type(torch.FloatTensor)
+        cont_feature[cont_feature.isnan()] = 0.0    # nan 값을 0으로
         cont_feature = cont_feature.roll(shifts=1, dims=1)
         cont_feature[:, 0] = 0
         cont_feature = (cont_feature * interaction_mask).unsqueeze(-1)

@@ -4,6 +4,7 @@ from dkt.dataloader import Preprocess
 from dkt import trainer
 import torch
 from dkt.utils import setSeeds
+import random
 import wandb
 def main(args):
     wandb.login()
@@ -12,16 +13,27 @@ def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args.device = device
 
+    # user split for validation
+    args.train_split = True
+    args.validation = False
+    args.all_user = set(range(7442))
+    args.val_user = random.sample(args.all_user, int(7442/5))
+
     preprocess = Preprocess(args)
     preprocess.load_train_data(args.file_name)
     train_data = preprocess.get_train_data()
 
     args.file_name = args.file_name_val
+    args.validation = True
+
     preprocess = Preprocess(args)
     preprocess.load_train_data(args.file_name)
-    valid_data = preprocess.get_train_data()
+    valid_data = preprocess.get_train_data()    
     
     # train_data, valid_data = preprocess.split_data(train_data)
+
+    del args.all_user
+    del args.val_user
     
     wandb.init(project='dkt', name=args.name, config=vars(args))
 

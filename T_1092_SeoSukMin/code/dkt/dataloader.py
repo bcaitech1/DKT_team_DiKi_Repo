@@ -43,7 +43,8 @@ class Preprocess:
 
     def __save_labels(self, encoder, name):
         le_path = os.path.join(self.args.asset_dir, name + '_classes.npy')
-        np.save(le_path, encoder.classes_)
+        if not os.path.isfile(le_path):
+            np.save(le_path, encoder.classes_)
 
     def __preprocessing(self, df, is_train = True):
         cate_cols = ['assessmentItemID', 'testId', 'KnowledgeTag', 'big_features']
@@ -93,6 +94,7 @@ class Preprocess:
 
         # 큰 카테고리
         df['big_features'] = df['testId'].apply(lambda x : x[2]).astype(int)
+        df['grade'] = df['testId'].str[2]
 
         # 큰 카테고리별 정답률
         file_check_path = os.path.join(self.args.asset_dir+'stu_groupby.csv')
@@ -149,6 +151,8 @@ class Preprocess:
         temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
         df['answer_delta'] = temp['answerCode'] - temp['answer_rate']
 
+        # answer_delta, test_delta, assess_delta
+
         # 정답 - 태그별 정답률
         temp = pd.merge(df, stu_tag_groupby.reset_index()[['answer_rate', 'KnowledgeTag']], on = ['KnowledgeTag'])
         temp = temp.sort_values(by=['userID','Timestamp'], axis=0).reset_index()
@@ -201,11 +205,31 @@ class Preprocess:
         df['mean_elapsed'] = np.log1p(df['mean_elapsed'])
         df['test_time'] = np.log1p(df['test_time'])
 
+        # fe4 추가 feature
+        # 대분류별 평균 소모시간 추가
+        grade_time = df.groupby('grade').prior_elapsed.mean()
+        grade_time.name = 'grade_time'
+        df = df.merge(grade_time, how='left', on=['grade'])
+
+        # user&태그별 누적 정답횟수
+        df['tag_cumAnswer'] = df.groupby(['userID', 'KnowledgeTag']).answerCode.cumsum() - df['answerCode']
+        df['tag_cumAnswer'] = np.log1p(df['tag_cumAnswer'])
+
         return df
 
     def load_data_from_file(self, file_name, is_train=True):
         csv_file_path = os.path.join(self.args.data_dir, file_name)
         df = pd.read_csv(csv_file_path, parse_dates=['Timestamp'])
+        if self.args.train_split and not self.args.validation:
+            mask = df['userID'].isin(self.args.val_user)
+            df['tmp_index'] = df.index
+            last_index = df.loc[mask].groupby('userID').last()
+            df = df.drop(index=last_index['tmp_index'].values)
+        elif self.args.train_split and self.args.validation:
+            mask = df['userID'].isin(self.args.val_user)
+            df = df.loc[mask]
+            
+
         df = self.__feature_engineering(df)
         df = self.__preprocessing(df, is_train)
 
@@ -217,7 +241,7 @@ class Preprocess:
 
         df = df.sort_values(by=['userID','Timestamp'], axis=0)
         columns = ['userID', 'assessmentItemID', 'testId', 'answerCode', 'KnowledgeTag', 'big_features', 'answer_delta', 
-        'tag_delta', 'test_delta', 'assess_delta', 'prior_elapsed', 'mean_elapsed', 'test_time']
+        'tag_delta', 'test_delta', 'assess_delta', 'prior_elapsed', 'mean_elapsed', 'test_time', 'grade_time', 'tag_cumAnswer']
 
         group = df[columns].groupby('userID').apply(
                 lambda r: (
@@ -232,7 +256,9 @@ class Preprocess:
                     r['assess_delta'].values,
                     r['prior_elapsed'].values,
                     r['mean_elapsed'].values,
-                    r['test_time'].values
+                    r['test_time'].values,
+                    r['grade_time'].values,
+                    r['tag_cumAnswer'].values
                 )
             )
 
@@ -256,10 +282,11 @@ class DKTDataset(torch.utils.data.Dataset):
         # 각 data의 sequence length
         seq_len = len(row[0])
 
-        test, question, tag, correct, big_features, answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time = row
+        test, question, tag, correct, big_features, answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time, grade_time, tag_cumAnswer = row
         
         cate_cols = [test, question, tag, correct, big_features]
-        cont_cols = [answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time]
+        cont_cols = [answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time, grade_time, tag_cumAnswer]
+
 
         # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다
         if seq_len > self.args.max_seq_len:
@@ -312,7 +339,7 @@ class DKTDatasetTrain(torch.utils.data.Dataset):
         if seq_len > self.args.max_seq_len:   # 너무 짧은 것을 자르면 좀 그러니깐 길이 100은 넘어야 자르기
             if random.random() > 0.4:   # 30% 확률로 발동
                 # 앞쪽 자를 길이
-                left = int((seq_len - 80) * random.random())      # 최소 80개는 되도록 자르기
+                # left = int((seq_len - 80) * random.random())      # 최소 80개는 되도록 자르기
                 left = 0
                 
                 # 뒤쪽 자를 길이
@@ -323,10 +350,10 @@ class DKTDatasetTrain(torch.utils.data.Dataset):
                 for i in range(len(row)):
                     row[i] = row[i][left: left + seq_len]
 
-        test, question, tag, correct, big_features, answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time = row
+        test, question, tag, correct, big_features, answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time, grade_time, tag_cumAnswer = row
         # category변수와 continuout변수를 나눠줌        
         cate_cols = [test, question, tag, correct, big_features]
-        cont_cols = [answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time]
+        cont_cols = [answer_delta, tag_delta, test_delta, assess_delta, prior_elapsed, mean_elapsed, test_time, grade_time, tag_cumAnswer]
 
 
         # max seq len을 고려하여서 이보다 길면 자르고 아닐 경우 그대로 냅둔다

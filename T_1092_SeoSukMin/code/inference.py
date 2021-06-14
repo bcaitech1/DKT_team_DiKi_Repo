@@ -7,6 +7,9 @@ def main(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     args.device = device
 
+    args.train_split = False
+    args.validation = False
+
     
     preprocess = Preprocess(args)
     preprocess.load_test_data(args.test_file_name)

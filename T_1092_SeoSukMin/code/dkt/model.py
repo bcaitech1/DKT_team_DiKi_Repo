@@ -294,7 +294,7 @@ class Bert(nn.Module):
 
         # cont features
         self.cont_embed = nn.Sequential(
-            nn.Linear(7, self.hidden_dim//2),
+            nn.Linear(9, self.hidden_dim//2),
             nn.LayerNorm(self.hidden_dim//2)
         )
 
@@ -390,7 +390,7 @@ class GPT2(nn.Module):
 
         # cont features
         self.cont_embed = nn.Sequential(
-            nn.Linear(7, self.hidden_dim//2),
+            nn.Linear(9, self.hidden_dim//2),
             nn.LayerNorm(self.hidden_dim//2)
         )
 
@@ -494,7 +494,7 @@ class LastQuery(nn.Module):
 
         # cont features
         self.cont_embed = nn.Sequential(
-            nn.Linear(7, self.hidden_dim//2),
+            nn.Linear(9, self.hidden_dim//2),
             nn.LayerNorm(self.hidden_dim//2)
         )
 
@@ -555,6 +555,20 @@ class LastQuery(nn.Module):
         # batchsize * n_head 수만큼 각 mask를 반복하여 증가시킨다
         mask = mask.repeat(1, self.args.n_heads).view(batch_size*self.args.n_heads, -1, seq_len)
         return mask.masked_fill(mask==1, float('-inf'))
+        # mask = mask.view(batch_size, 1, seq_len).repeat(1, seq_len, 1)
+        # seq_mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1).view(1, seq_len, seq_len).repeat(batch_size, 1, 1).to(self.device)
+        # mask[seq_mask == 1] = 0
+
+        # new_mask = torch.zeros_like(mask)
+        # new_mask[mask == 0] = 1
+        # new_mask[mask != 0] = 0
+        # mask = new_mask.type(torch.FloatTensor)
+    
+        # # batchsize * n_head 수만큼 각 mask를 반복하여 증가시킨다
+        # mask = torch.repeat_interleave(mask, self.args.n_heads, dim=0)
+
+        # # mask = mask.repeat(1, 1, self.args.n_heads, 1).view(batch_size*self.args.n_heads, -1, seq_len)
+        # return mask.masked_fill(mask==1, float('-inf'))
 
 
     def forward(self, input):
@@ -591,15 +605,22 @@ class LastQuery(nn.Module):
         # embed = embed + embed_pos
 
         ####################### ENCODER #####################
-        q = self.query(embed)[:, -1:, :].permute(1, 0, 2)
+        # q = self.query(embed)[:, -1:, :].permute(1, 0, 2)
+        q = self.query(embed).permute(1, 0, 2)
         k = self.key(embed).permute(1, 0, 2)
         v = self.value(embed).permute(1, 0, 2)
 
         ## attention
         # last query only
-        self.mask = self.get_mask(seq_len, mask, batch_size).to(self.device)
-        out, _ = self.attn(q, k, v, attn_mask=self.mask)
+        # self.mask = self.get_mask(seq_len, mask, batch_size).to(self.device)
         
+
+        # all query for 2D mask
+        self.mask = torch.triu(torch.ones(seq_len, seq_len), diagonal=1)
+        self.mask = self.mask.masked_fill(self.mask==1, float('-inf')).to(self.device)
+
+        out, _ = self.attn(q, k, v, attn_mask=self.mask)
+
         ## residual + layer norm
         out = out.permute(1, 0, 2)
         out = embed + out
