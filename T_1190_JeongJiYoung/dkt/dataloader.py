@@ -8,7 +8,7 @@ import random
 from sklearn.preprocessing import LabelEncoder
 import numpy as np
 import torch
-from sklearn.model_selection import GroupShuffleSplit, train_test_split
+from sklearn.model_selection import GroupShuffleSplit, train_test_split, KFold
 from sklearn.preprocessing import QuantileTransformer
 
 class Preprocess:
@@ -25,7 +25,9 @@ class Preprocess:
         self.cate_cols = ['testId', 'assessmentItemID', 'KnowledgeTag', 'grade'] # 순서유의
         self.num_cols = [
             'prior_elapsed', 'mean_elapsed', 'test_time', 'grade_time', # 시간
-            'answer_delta', 'tag_delta', 'test_delta', 'assess_delta', # 정답률
+            'answer_delta',
+            'tag_delta', 'test_delta', 'assess_delta', # 정답률
+            # 'big_tag_delta', 'big_test_delta', 'big_assess_delta', # 대분류&정답률
             'tag_cumAnswer'
             ]
 
@@ -38,6 +40,12 @@ class Preprocess:
 
     def get_test_data(self):
         return self.test_data
+
+    def split_index(self, data, train_i, valid_i):
+        data_1 = [data[i] for i in train_i]
+        data_2 = [data[i] for i in valid_i]
+
+        return data_1, data_2
 
     def split_data(self, data, ratio=0.7, shuffle=True, seed=0):
         """
@@ -57,6 +65,7 @@ class Preprocess:
 
         return data_1, data_2
 
+    # 사용안함
     def split_specific(self, data, ratio=0.7, shuffle=True, seed=0):
         if shuffle:
             random.seed(seed) # fix to default seed 0
@@ -168,6 +177,7 @@ class Preprocess:
         df.loc[df['prior_elapsed'] > upper_bound, 'prior_elapsed'] = median 
         df['prior_elapsed'] = df['prior_elapsed'].fillna(median) # 빈값 채우기
 
+        # 수치형 transform
         df['prior_elapsed'] = np.log1p(df['prior_elapsed']) #
         df['prior_elapsed'] = QuantileTransformer(output_distribution='normal').fit_transform(df.prior_elapsed.values.reshape(-1,1)).reshape(-1) 
 
@@ -185,11 +195,6 @@ class Preprocess:
         grade_time = df.groupby('grade').prior_elapsed.mean()
         grade_time.name = 'grade_time'
         df = df.merge(grade_time, how='left', on=['grade'])
-
-        # 수치형 로그
-        # df['mean_elapsed'] = np.log1p(df['mean_elapsed'])
-        # df['test_time'] = np.log1p(df['test_time'])
-        # df['grade_time'] = np.log1p(df['grade_time'])
 
         # user&태그별 누적 카운트
         # df['tag_cumCount'] = df.groupby(['userID', 'KnowledgeTag']).cumcount()
@@ -219,21 +224,33 @@ class Preprocess:
 
         # tag별 정답률
         stu_tag_groupby = cal_df.groupby(['KnowledgeTag']).agg({
-            'assessmentItemID': 'count',
             'answerCode': percentile
         }).rename(columns = {'answerCode' : 'answer_rate'})
 
         # 시험지별 정답률
         stu_test_groupby = cal_df.groupby(['testId']).agg({
-            'assessmentItemID': 'count',
             'answerCode': percentile
         }).rename(columns = {'answerCode' : 'answer_rate'})
-                                                                    
+
         # 문항별 정답률
         stu_assessment_groupby = cal_df.groupby(['assessmentItemID']).agg({
-            'assessmentItemID': 'count',
             'answerCode': percentile
         }).rename(columns = {'assessmentItemID' : 'assessment_count', 'answerCode' : 'answer_rate'})
+
+        # big&tag별 정답률
+        big_tag_groupby = df.groupby(['big_features', 'KnowledgeTag']).agg({
+            'answerCode': percentile
+        }).rename(columns = {'answerCode' : 'answer_rate'})
+
+        # big&시험지별 정답률
+        big_test_groupby = df.groupby(['big_features', 'testId']).agg({
+            'answerCode': percentile
+        }).rename(columns = {'answerCode' : 'answer_rate'})
+
+        # big&문항별 정답률 + 문제count
+        big_assessment_groupby = df.groupby(['big_features', 'assessmentItemID']).agg({
+            'answerCode': percentile
+        }).rename(columns = {'answerCode' : 'answer_rate'})
 
         # 정답 - 큰 카테고리별 정답률 
         '''ex)
@@ -254,6 +271,18 @@ class Preprocess:
         # 정답 - 문항별 정답률
         df = df.merge(stu_assessment_groupby.reset_index()[['answer_rate', 'assessmentItemID']], on=['assessmentItemID'])
         df = df.rename(columns={'answer_rate':'assess_delta'})
+
+        # 정답 - big & 태그별 정답률
+        df = df.merge(big_tag_groupby.reset_index()[['answer_rate', 'KnowledgeTag', 'big_features']], on=['big_features', 'KnowledgeTag'])
+        df = df.rename(columns={'answer_rate':'big_tag_delta'})
+
+        # 정답 - big & 시험별 정답률
+        df = df.merge(big_test_groupby.reset_index()[['answer_rate', 'testId', 'big_features']], on=['big_features', 'testId'])
+        df = df.rename(columns={'answer_rate':'big_test_delta'})
+
+        # 정답 - big&문항별 정답률
+        df = df.merge(big_assessment_groupby.reset_index()[['answer_rate', 'assessmentItemID', 'big_features']], on=['big_features', 'assessmentItemID'])
+        df = df.rename(columns={'answer_rate':'big_assess_delta'})
 
         return df
 

@@ -11,7 +11,7 @@ from .model import LSTM, LSTMATTN, Bert
 
 import wandb
 
-def run(args, train_data, valid_data):
+def run(args, train_data, valid_data, kfold=''):
     train_loader, valid_loader = get_loaders(args, train_data, valid_data)
     
     # only when using warmup scheduler
@@ -27,7 +27,7 @@ def run(args, train_data, valid_data):
     early_stopping_counter = 0
     for epoch in range(args.n_epochs):
 
-        print(f"Start Training: Epoch {epoch + 1}")
+        print(f"Start Training: Epoch {epoch + 1} Fold {kfold}")
         
         ### TRAIN
         train_auc, train_acc, train_loss = train(train_loader, model, optimizer, args)
@@ -37,7 +37,10 @@ def run(args, train_data, valid_data):
 
         ### TODO: model save or early stopping
         if args.wandb:
-            wandb.log({"epoch": epoch + 1, "train_loss": train_loss, "train_auc": train_auc, "train_acc":train_acc,
+            display_epoch = epoch + 1
+            if kfold:
+                display_epoch += (int(kfold)-1) * args.n_epochs
+            wandb.log({"epoch": display_epoch, "train_loss": train_loss, "train_auc": train_auc, "train_acc":train_acc,
                     "valid_auc":auc, "valid_acc":acc, "lr":get_lr(optimizer)})
         if auc > best_auc:
             best_auc = auc
@@ -48,7 +51,7 @@ def run(args, train_data, valid_data):
                 'epoch': epoch + 1,
                 'state_dict': model_to_save.state_dict(),
                 },
-                args.model_dir, 'model.pt',
+                args.model_dir, f'model{kfold}.pt',
             )
             early_stopping_counter = 0
         else:
@@ -63,8 +66,9 @@ def run(args, train_data, valid_data):
         else:
             scheduler.step()
     
-    wandb.log({"best_auc":best_auc, "with_acc":with_acc})
-    wandb.finish()
+    if args.wandb:
+        wandb.log({"best_auc":best_auc, "with_acc":with_acc})
+    
 
 
 
@@ -151,30 +155,37 @@ def validate(valid_loader, model, args):
 
 
 def inference(args, test_data):
-    
-    model = load_model(args)
-    model.eval()
-    _, test_loader = get_loaders(args, None, test_data)
-    
-    
-    total_preds = []
-    
-    for step, batch in enumerate(test_loader):
-        input = process_batch(batch, args)
+    kfold = 5 if args.kfold5 else 1
+    kfold_total = None
 
-        preds = model(input)
+    for k in range(1, kfold+1):
+        if args.kfold5: args.model_name = f"model{k}.pt"
+        model = load_model(args)
+        model.eval()
+        _, test_loader = get_loaders(args, None, test_data)
+        total_preds = []
         
+        for step, batch in enumerate(test_loader):
+            input = process_batch(batch, args)
+            preds = model(input)
+            # predictions
+            preds = preds[:,-1]
 
-        # predictions
-        preds = preds[:,-1]
-        
+            if args.device == 'cuda':
+                preds = preds.to('cpu').detach().numpy()
+            else: # cpu
+                preds = preds.detach().numpy()
+                
+            total_preds+=list(preds)
 
-        if args.device == 'cuda':
-            preds = preds.to('cpu').detach().numpy()
-        else: # cpu
-            preds = preds.detach().numpy()
-            
-        total_preds+=list(preds)
+        if kfold_total is None:
+            kfold_total = np.array(total_preds)
+        else:
+            kfold_total += total_preds
+
+    # kfold 라면 평균
+    if args.kfold5:
+        total_preds = kfold_total / kfold
 
     write_path = os.path.join(args.output_dir, "output.csv")
     if not os.path.exists(args.output_dir):
@@ -184,7 +195,7 @@ def inference(args, test_data):
         w.write("id,prediction\n")
         for id, p in enumerate(total_preds):
             w.write('{},{}\n'.format(id,p))
-
+            
 
 
 
@@ -282,8 +293,6 @@ def save_checkpoint(state, model_dir, model_filename):
 
 
 def load_model(args):
-    
-    
     model_path = os.path.join(args.model_dir, args.model_name)
     print("Loading Model from:", model_path)
     load_state = torch.load(model_path)
