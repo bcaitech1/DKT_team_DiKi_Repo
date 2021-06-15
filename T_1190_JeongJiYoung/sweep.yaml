@@ -1,0 +1,30 @@
+program: /opt/ml/myfolder/train.py
+method: random
+metric:
+  name: best_auc
+  goal: maximize
+parameters:
+  lr:
+    min: 0.00001
+    max: 0.0001
+    distribution: uniform
+  batch_size:
+    values:
+      - 64
+      - 48
+      - 32
+      - 16
+  max_seq_len:
+    min: 15
+    max: 180
+  n_epochs:
+    value: 40
+command:
+  - ${interpreter}
+  - ${program}
+  - --wandb
+  - --kfold5
+  - ${args}
+  
+    
+  

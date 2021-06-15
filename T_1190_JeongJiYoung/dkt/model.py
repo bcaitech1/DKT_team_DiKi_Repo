@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F 
+import torch.nn.functional as F
 import numpy as np
 import copy
 import math
@@ -66,7 +66,7 @@ class Bert(nn.Module):
 
 
     def forward(self, input):
-
+        # big_tag_delta, big_test_delta, big_assess_delta, \
         test, question, tag, grade, \
         prior_elapsed, mean_elapse, test_time, grade_time, \
         answer_delta, \

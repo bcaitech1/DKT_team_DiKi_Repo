@@ -50,8 +50,13 @@ def parse_args(mode='train'):
     parser.add_argument('--name', default='', type=str)
     parser.add_argument('--kfold5', action='store_true')
 
-    
+    # AUG
+    parser.add_argument('--window', default=True, type=bool)
+    # parser.add_argument('--stride', default=20, type=int)
+    parser.add_argument('--shuffle', default=False, type=bool)
+    parser.add_argument('--shuffle_n', default=2, type=int)
 
     args = parser.parse_args()
-
+    args.stride = args.max_seq_len
+    
     return args

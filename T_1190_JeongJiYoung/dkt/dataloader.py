@@ -10,6 +10,8 @@ import numpy as np
 import torch
 from sklearn.model_selection import GroupShuffleSplit, train_test_split, KFold
 from sklearn.preprocessing import QuantileTransformer
+from torch.nn.utils.rnn import pad_sequence
+
 
 class Preprocess:
     def __init__(self,args):
@@ -290,15 +292,22 @@ class Preprocess:
         csv_file_path = os.path.join(self.args.data_dir, file_name)
         df = pd.read_csv(csv_file_path, parse_dates=['Timestamp'])
 
-        # 다른 data set까지 포함시킨 평균 계산을 위해 추가
         if is_train:
+            # seq_len 15 이하 제외
+            u_count = df.groupby('userID').assessmentItemID.count().reset_index()
+            u_count = u_count.rename(columns={'assessmentItemID':'count'})
+            df = df.merge(u_count, how='left', on=['userID'])
+            df = df[df['count'] >= 15].reset_index()
+
             self.split_hardcode(df, ratio=0.8, seed=self.args.seed) # 미리 split
             extra_file_name = self.args.test_file_name
         else:
             extra_file_name = self.args.file_name
         extra_userID = None 
+        # 다른 data set까지 포함(평균계산을 위해서)
         # df, extra_userID = self.add_extra_df(df, extra_file_name)
 
+        
         # FE
         df = self.__feature_engineering(df)
         # extra_df 드롭
@@ -339,12 +348,20 @@ class Preprocess:
 
 
 class DKTDataset(torch.utils.data.Dataset):
-    def __init__(self, data, args):
+    def __init__(self, data, args, is_change=False, is_reduce=False):
         self.data = data
         self.args = args
+        self.is_change = is_change
+        self.is_reduce = is_reduce
 
     def __getitem__(self, index):
         row = self.data[index] # csv의 row 형태 아님, 한 userID의 모든 데이터
+
+        # augmentation
+        if self.is_change: 
+            row = self.change_seq(row)
+        if self.is_reduce:
+            row = self.reduce_seq(row)
 
         # 각 data의 sequence length
         seq_len = len(row[0])
@@ -371,15 +388,35 @@ class DKTDataset(torch.utils.data.Dataset):
 
     def __len__(self):
         return len(self.data)
+    
+    # 데이터 변경
+    def change_seq(self, row):
+        seq_len = len(row[0])
+        aug_p = np.random.rand()
+        if seq_len > self.args.max_seq_len and aug_p > 0.5:
+            end_i = np.random.randint(self.args.max_seq_len, seq_len) # 최소 max_seq_len, 마지막 제외
+            for i in range(len(row)):
+                row[i] = row[i][:end_i]
 
+        return row
 
-from torch.nn.utils.rnn import pad_sequence
+    # 데이터 seq_len 축소
+    def reduce_seq(self, row):
+        seq_len = len(row[0])
+        aug_p = np.random.rand()
+        if seq_len > 15 and aug_p > 0.5: # 15 초과만 해당
+            max_len = min(seq_len, self.args.max_seq_len)
+            new_seq_len = np.random.randint(15, max_len)
+            for i in range(len(row)):
+                row[i] = row[i][-new_seq_len:]
+
+        return row
+
 
 def collate(batch):
     col_n = len(batch[0])
     col_list = [[] for _ in range(col_n)]
     max_seq_len = len(batch[0][-1])
-
         
     # batch의 값들을 각 column끼리 그룹화
     for row in batch:
@@ -387,7 +424,6 @@ def collate(batch):
             pre_padded = torch.zeros(max_seq_len)
             pre_padded[-len(col):] = col
             col_list[i].append(pre_padded)
-
 
     for i, _ in enumerate(col_list):
         col_list[i] =torch.stack(col_list[i])
@@ -401,7 +437,7 @@ def get_loaders(args, train, valid):
     train_loader, valid_loader = None, None
     
     if train is not None:
-        trainset = DKTDataset(train, args)
+        trainset = DKTDataset(train, args, is_change=True, is_reduce=True)
         train_loader = torch.utils.data.DataLoader(trainset, num_workers=args.num_workers, shuffle=True,
                             batch_size=args.batch_size, pin_memory=pin_memory, collate_fn=collate)
     if valid is not None:
@@ -410,3 +446,10 @@ def get_loaders(args, train, valid):
                             batch_size=args.batch_size, pin_memory=pin_memory, collate_fn=collate)
 
     return train_loader, valid_loader
+
+def get_loader(args, data, is_change=False, is_reduce=False, shuffle=False):
+    pin_memory = False
+    dataset = DKTDataset(data, args, is_change, is_reduce)
+    data_loader = torch.utils.data.DataLoader(dataset, num_workers=args.num_workers, shuffle=shuffle,
+                            batch_size=args.batch_size, pin_memory=pin_memory, collate_fn=collate)
+    return data_loader
