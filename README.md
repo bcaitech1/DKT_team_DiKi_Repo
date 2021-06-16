@@ -46,6 +46,7 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 ---
 
 ## Task에서 직면한 문제 및 해결 방안
+**아래 문제들을 Feature / Data Augmentation / Model / Loss / Ensemble 5가지 관점으로 접근**
 
 - **문제1)** 주어진 데이터의 feature와 user수 부족
 
@@ -66,7 +67,6 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 
   **해결 방안 : [K-Fold CV](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/04a0235fe86e9eb04aa3372d71c34a41229bfc09/T_1190_JeongJiYoung/train.py#L30)**
 
-**→ 이러한 문제들을 Feature / Data Augmentation / Model / Loss / Ensemble 5가지 관점으로 접근**
 
 ---
 
