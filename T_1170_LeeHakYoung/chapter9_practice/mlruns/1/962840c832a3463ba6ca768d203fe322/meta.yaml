@@ -1,0 +1,15 @@
+artifact_uri: file:///opt/ml/code/T_1170_LeeHakYoung/chapter9_practice/mlruns/1/962840c832a3463ba6ca768d203fe322/artifacts
+end_time: 1623033134771
+entry_point_name: ''
+experiment_id: '1'
+lifecycle_stage: active
+name: ''
+run_id: 962840c832a3463ba6ca768d203fe322
+run_uuid: 962840c832a3463ba6ca768d203fe322
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1623032827336
+status: 3
+tags: []
+user_id: root

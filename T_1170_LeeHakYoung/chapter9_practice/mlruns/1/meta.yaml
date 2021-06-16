@@ -1,0 +1,4 @@
+artifact_location: file:///opt/ml/code/T_1170_LeeHakYoung/chapter9_practice/mlruns/1
+experiment_id: '1'
+lifecycle_stage: active
+name: sklearn-test

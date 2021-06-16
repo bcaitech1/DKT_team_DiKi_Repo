@@ -1,0 +1,4 @@
+artifact_location: file:///opt/ml/code/T_1170_LeeHakYoung/chapter9_practice/mlruns/2
+experiment_id: '2'
+lifecycle_stage: active
+name: pytorch-test

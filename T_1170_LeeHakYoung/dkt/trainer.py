@@ -15,7 +15,7 @@ from .model import LSTM, Bert, Saint, LastQuery, FixupEncoder, TfixupBert, GPT2
 
 import wandb
 
-def run(args, train_data, valid_data, gradient=False):
+def run(args, train_data, valid_data, kfold=''):
     # 캐시 메모리 비우기 및 가비지 컬렉터 가동!
     torch.cuda.empty_cache()
     gc.collect()
@@ -35,17 +35,6 @@ def run(args, train_data, valid_data, gradient=False):
     optimizer = get_optimizer(model, args)
     scheduler = get_scheduler(optimizer, args)
 
-    # 🌟 분석에 사용할 값 저장 🌟
-    # report = OrderedDict()
-
-    # gradient step 분석에 사용할 변수
-    if gradient:
-        args.n_iteration = 0
-        args.gradient = OrderedDict()
-
-        # 모델의 gradient값을 가리키는 모델 명 저장
-        args.gradient['name'] = [name for name, _ in model.named_parameters()]
-
     best_auc = -1
     best_auc_epoch = -1
     best_acc = -1
@@ -58,27 +47,13 @@ def run(args, train_data, valid_data, gradient=False):
         
         ### TRAIN
         train_start_time = time.time()
-        train_auc, train_acc, train_loss = train(train_loader, model, optimizer, scheduler, args, gradient)
+        train_auc, train_acc, train_loss = train(train_loader, model, optimizer, scheduler, args)
         train_time = time.time() - train_start_time
-
-        # epoch_report['train_auc'] = train_auc
-        # epoch_report['train_acc'] = train_acc
-        # epoch_report['train_time'] = train_time
         
         ### VALID
         valid_start_time = time.time()
         auc, acc,_ , _ = validate(valid_loader, model, args)
         valid_time = time.time() - valid_start_time
-
-        # epoch_report['valid_auc'] = auc
-        # epoch_report['valid_acc'] = acc
-        # epoch_report['valid_time'] = valid_time
-
-        # save lr
-        # epoch_report['lr'] = optimizer.param_groups[0]['lr']
-
-        # 🌟 save it to report 🌟
-        # report[f'{epoch + 1}'] = epoch_report
 
         ### TODO: model save or early stopping
         wandb.log({"lr": optimizer.param_groups[0]['lr'], "train_loss": train_loss, "train_auc": train_auc, "train_acc":train_acc,
@@ -91,7 +66,7 @@ def run(args, train_data, valid_data, gradient=False):
                 'epoch': epoch + 1,
                 'state_dict': model_to_save.state_dict(),
                 },
-                args.model_dir, 'model.pt',
+                args.model_dir, f'model{kfold}.pt',
             )
             early_stopping_counter = 0
         else:
@@ -104,22 +79,8 @@ def run(args, train_data, valid_data, gradient=False):
         if args.scheduler == 'plateau':
             scheduler.step(best_auc)
 
-    # save best records
-    # report['best_auc'] = best_auc
-    # report['best_auc_epoch'] = best_auc_epoch
-    # report['best_acc'] = best_acc
-    # report['best_acc_epoch'] = best_acc_epoch
 
-    # save gradient informations
-    if gradient:
-        # report['gradient'] = args.gradient
-        del args.gradient
-        del args['gradient']
-
-    return None #report
-
-
-def train(train_loader, model, optimizer, scheduler, args, gradient=False):
+def train(train_loader, model, optimizer, scheduler, args):
     model.train()
 
     total_preds = []
@@ -134,11 +95,6 @@ def train(train_loader, model, optimizer, scheduler, args, gradient=False):
         
         loss = compute_loss(preds, targets, index)
         loss.backward()
-
-        # save gradient distribution
-        if gradient:
-            args.n_iteration += 1
-            args.gradient[f'iteration_{args.n_iteration}'] = get_gradient(model)
 
         # grad clip
         if args.clip_grad:
@@ -221,31 +177,44 @@ def validate(valid_loader, model, args):
 
 
 def inference(args, test_data):
+    kfold = args.kfold if args.kfold else 1
+    kfold_total = None
     
-    model = load_model(args)
-    model.eval()
-    _, test_loader = get_loaders(args, None, test_data)
-    
-    
-    total_preds = []
-    
-    for step, batch in enumerate(test_loader):
-        input = process_batch(batch, args)
-        index = input[0][-1]
-
-        preds = model(input)
+    for k in range(1, kfold + 1):
+        if args.kfold: args.model_name = f"model{k}.pt"
+        model = load_model(args)
+        model.eval()
+        _, test_loader = get_loaders(args, None, test_data)
         
-
-        # predictions
-        preds = preds.gather(1, index).view(-1)
         
+        total_preds = []
+        
+        for step, batch in enumerate(test_loader):
+            input = process_batch(batch, args)
+            index = input[0][-1]
 
-        if args.device == 'cuda':
-            preds = preds.to('cpu').detach().numpy()
-        else: # cpu
-            preds = preds.detach().numpy()
+            preds = model(input)
             
-        total_preds+=list(preds)
+
+            # predictions
+            preds = preds.gather(1, index).view(-1)
+            
+
+            if args.device == 'cuda':
+                preds = preds.to('cpu').detach().numpy()
+            else: # cpu
+                preds = preds.detach().numpy()
+                
+            total_preds+=list(preds)
+
+        if kfold_total is None:
+            kfold_total = np.array(total_preds)
+        else:
+            kfold_total += total_preds
+
+    # kfold 라면 평균
+    if args.kfold:
+        total_preds = kfold_total / kfold
 
     write_path = os.path.join(args.output_dir, "output.csv")
     if not os.path.exists(args.output_dir):

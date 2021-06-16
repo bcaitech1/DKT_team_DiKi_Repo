@@ -2,7 +2,8 @@ import os
 import torch
 import numpy as np
 
-from .dataloader import get_loaders
+from .dataloader import get_loaders, get_loader
+from .augmentation import data_augmentation
 from .optimizer import get_optimizer
 from .scheduler import get_scheduler
 from .criterion import get_criterion
@@ -12,7 +13,13 @@ from .model import LSTM, LSTMATTN, Bert
 import wandb
 
 def run(args, train_data, valid_data, kfold=''):
-    train_loader, valid_loader = get_loaders(args, train_data, valid_data)
+
+    # augmentation
+    # augmented_train_data = data_augmentation(train_data, args)
+    # if len(augmented_train_data) != len(train_data):
+    #     print(f"Data Augmentation applied. Train data {len(train_data)} -> {len(augmented_train_data)}\n")
+
+    train_loader, _ = get_loaders(args, train_data, None)
     
     # only when using warmup scheduler
     args.total_steps = int(len(train_loader.dataset) / args.batch_size) * (args.n_epochs)
@@ -33,7 +40,21 @@ def run(args, train_data, valid_data, kfold=''):
         train_auc, train_acc, train_loss = train(train_loader, model, optimizer, args)
         
         ### VALID
-        auc, acc, _, _ = validate(valid_loader, model, args)
+        auc = 0.
+        acc = 0.
+        for i in range(5):
+            if i == 0:
+                valid_loader = get_loader(args, valid_data, False, False)
+            else:
+                np.random.seed(seed=i*10)
+                valid_loader = get_loader(args, valid_data, False, True)
+
+            v_auc, v_acc, _, _ = validate(valid_loader, model, args)
+            auc += v_auc
+            acc += v_acc
+        auc /= 5
+        acc /= 5
+        np.random.seed(seed=args.seed)
 
         ### TODO: model save or early stopping
         if args.wandb:
@@ -162,24 +183,38 @@ def inference(args, test_data):
         if args.kfold5: args.model_name = f"model{k}.pt"
         model = load_model(args)
         model.eval()
-        _, test_loader = get_loaders(args, None, test_data)
-        total_preds = []
-        
-        for step, batch in enumerate(test_loader):
-            input = process_batch(batch, args)
-            preds = model(input)
-            # predictions
-            preds = preds[:,-1]
 
-            if args.device == 'cuda':
-                preds = preds.to('cpu').detach().numpy()
-            else: # cpu
-                preds = preds.detach().numpy()
+        total_preds = np.zeros((len(test_data)))
+        # TTA를 위한 반복
+        for i in range(5):
+            if i == 0:
+                test_loader = get_loader(args, test_data, is_change=False, is_reduce=False)
+            else:
+                np.random.seed(i*10)
+                test_loader = get_loader(args, test_data, is_change=False, is_reduce=True)
+            
+            all_preds = []
+            for step, batch in enumerate(test_loader):
+                input = process_batch(batch, args)
+                preds = model(input)
+                # predictions
+                preds = preds[:, -1]
+
+                if args.device == 'cuda':
+                    preds = preds.to('cpu').detach().numpy()
+                else: # cpu
+                    preds = preds.detach().numpy()
                 
-            total_preds+=list(preds)
+                all_preds += list(preds)
+
+            total_preds += all_preds
+
+        # END Prediction
+        np.random.seed(args.seed)
+        total_preds /= 5
 
         if kfold_total is None:
-            kfold_total = np.array(total_preds)
+            kfold_total = total_preds
         else:
             kfold_total += total_preds
 
@@ -267,7 +302,6 @@ def compute_loss(preds, targets):
     Args :
         preds   : (batch_size, max_seq_len)
         targets : (batch_size, max_seq_len)
-
     """
     loss = get_criterion(preds, targets)
     #마지막 시퀀드에 대한 값만 loss 계산
