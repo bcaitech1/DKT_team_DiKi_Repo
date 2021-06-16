@@ -4,7 +4,7 @@
 
 - [프로젝트 소개](#프로젝트-소개)
 - [문제점](#문제점)
-- [Model](-#model-architectures)
+- [Model](#model-architectures)
 - [최종 리더보드 점수](#최종-리더보드-점수)
 
 
