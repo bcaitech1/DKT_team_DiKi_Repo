@@ -20,6 +20,12 @@ class Preprocess:
     def get_test_data(self):
         return self.test_data
 
+    def split_index(self, data, train_i, valid_i):
+        data_1 = [data[i] for i in train_i]
+        data_2 = [data[i] for i in valid_i]
+
+        return data_1, data_2
+
     def split_data(self, data, ratio=0.7, shuffle=True, seed=0):
         """
         split data into two parts with a given ratio.

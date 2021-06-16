@@ -13,6 +13,7 @@ def parse_args(mode='train'):
     config['file_name'] = 'train_data.csv'
     config['log_steps'] = 50
     config['patience'] = 15
+    config['kfold'] = 0
 
     # 데이터
     config['max_seq_len'] = 200
