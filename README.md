@@ -63,13 +63,23 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 
 ## Model Architectures
 
-- [bert](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1190_JeongJiYoung/dkt/model.py#L14)
+### [bert](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1190_JeongJiYoung/dkt/model.py#L14)
+BERT로 transformer 모델 첫 시도를 하였습니다.
 
   ![bert](https://user-images.githubusercontent.com/59329586/122216448-614aee80-cee7-11eb-8c7e-0140b3512bc4.png)
-- [gpt2](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1170_LeeHakYoung/dkt/model.py#L776)
+### [gpt2](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1170_LeeHakYoung/dkt/model.py#L776)
+
+오직 앞에 나오는 sequence 데이터들만 사용하여 학습을 진행하기 위한 transformer 모델입니다.
+Huggingface 에서 GPT-2 모델의 구조만을 가져와 사용하였으며, GPT의 architecture는 아래의 그림과 같습니다.
 
   ![GPT2](https://user-images.githubusercontent.com/59329586/122216415-58f2b380-cee7-11eb-8aca-2682f16cc081.png)
-- [custom last query](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1117_ShinChanHo/code/dkt/model.py#L723)
+### [custom last query](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1117_ShinChanHo/code/dkt/model.py#L723)
+
+Kagle Riiid 대회 1등 모델인 Last Query 모델에서 착안하였습니다. 
+Riiid에서는 1억개의 Data가 주어졌고, 긴 Sequence로 인한 Transformer 시간복잡도를 줄이기 위해 Last Query를 사용하였습니다.
+하지만 저희 DKT 대회에서는 200만개의 Data만 주어졌고, Sequence 길이에 의한 시간 복잡도는 문제 되지 않는다고 판단하여 전체 Sequence에 대해 Transformer를 적용하였습니다.
+Model Architecture를 아래와 같이 도식화 하였습니다.
+
 ![image](https://user-images.githubusercontent.com/52587290/122212631-08795700-cee3-11eb-96a8-0dec6b949e3a.png)
 
 ### 최종 리더보드 점수
