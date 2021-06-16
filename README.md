@@ -7,7 +7,8 @@ DKT는 Deep Knowledge Tracing의 약자로 우리의 "지식 상태"를 추적�
 
 각 학생이 푼 문제 리스트와 정답 여부가 담긴 데이터를 받아 최종 문제를 맞출지 틀릴지 예측
 
-![https://s3-us-west-2.amazonaws.com/secure.notion-static.com/5a92093c-9588-4b0e-bf06-64789b9b23e3/Untitled.png](https://s3-us-west-2.amazonaws.com/secure.notion-static.com/5a92093c-9588-4b0e-bf06-64789b9b23e3/Untitled.png)
+![Untitled](https://user-images.githubusercontent.com/59329586/122187219-ce4f8b80-cec9-11eb-9a09-b2ad63b61155.png)
+
 
 ## 접근방법
 
