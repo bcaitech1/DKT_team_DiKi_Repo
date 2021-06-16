@@ -48,7 +48,7 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 - 주어진 데이터의 feature와 user수가 너무 적음 → [Feature engineering](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/dataloader.py#L83)
 - 버려지는 Sequence data가 너무 많다. → [Data Augmentation](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/dataloader.py#L339)
 - 앙상블 효과를 올리기 위해서는 다양한 모델 사용이 필요하다. → [다양한 Model 학습](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/model.py)
-- Model의 output 중 꼭 마지막 문제의 output만 활용이 된다 → [Loss 재정의](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/trainer.py#L301)
+- model의 output 중 꼭 마지막 문제의 output만 활용이 된다 → [Loss 재정의](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/trainer.py#L301)
 - AUC Metric 특성을 활용한 Ensemble → Custom Ensemble
 - 모든 데이터를 훈련에 사용한다. → [K-Fold CV](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/04a0235fe86e9eb04aa3372d71c34a41229bfc09/T_1190_JeongJiYoung/train.py#L30)
 
