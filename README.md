@@ -3,7 +3,7 @@
 # 목차 
 
 - [프로젝트 소개](#프로젝트-소개)
-- [문제점](#문제점)
+- [문제점](#task에서-직면한-문제-및-해결-방안)
 - [Model](#model-architectures)
 - [최종 리더보드 점수](#최종-리더보드-점수)
 
@@ -43,16 +43,29 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 
 ![047c8d8e-5d30-4d5a-8afd-d72a254c6318](https://user-images.githubusercontent.com/59329586/122188993-7dd92d80-cecb-11eb-9e3d-53bec5db329d.png)
 
-## 문제점
+## Task에서 직면한 문제 및 해결 방안
 
-- 주어진 데이터의 feature와 user수가 너무 적음 → [Feature engineering](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/dataloader.py#L83)
-- 버려지는 Sequence data가 너무 많다. → [Data Augmentation](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/dataloader.py#L339)
-- 앙상블 효과를 올리기 위해서는 다양한 모델 사용이 필요하다. → [다양한 Model 학습](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/model.py)
-- model의 output 중 꼭 마지막 문제의 output만 활용이 된다 → [Loss 재정의](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/trainer.py#L301)
-- AUC Metric 특성을 활용한 Ensemble → Custom Ensemble
-- 모든 데이터를 훈련에 사용한다. → [K-Fold CV](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/04a0235fe86e9eb04aa3372d71c34a41229bfc09/T_1190_JeongJiYoung/train.py#L30)
+- **문제1)** 주어진 데이터의 feature와 user수 부족
+
+  **해결 방안 : [Feature engineering](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/dataloader.py#L83)**
+- **문제2)** Max Sequence Length 이상 Data 손실
+
+  **해결 방안 : [Data Augmentation](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/dataloader.py#L339)**
+- **문제3)** 앙상블 효과를 올리기 위해서는 다양한 모델 사용이 필요
+
+  **해결 방안 : [다양한 Model 학습](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/model.py)**
+- **문제4)** Model의 output 중 마지막 Sequence만 학습에 사용됨 
+
+  **해결 방안 : [Loss 재 정의](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/trainer.py#L301)**
+- **문제5)** AUC Metric 점수 극대화를 위한 Ensemble 기법 필요
+
+  **해결 방안 : Custom Ensemble**
+- **문제6)** Validation에 사용된 데이터 학습 필요
+
+  **해결 방안 : [K-Fold CV](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/04a0235fe86e9eb04aa3372d71c34a41229bfc09/T_1190_JeongJiYoung/train.py#L30)**
 
 **→ 이러한 문제들을 Feature / Data Augmentation / Model / Loss / Ensemble 5가지 관점으로 접근**
+
 
 ### Augmentation
 
