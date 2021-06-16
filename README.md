@@ -67,12 +67,14 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 BERT로 transformer 모델 첫 시도를 하였습니다.
 
 <img src="https://user-images.githubusercontent.com/28282381/122213958-7eca8900-cee4-11eb-8249-052876f814df.png"  width=200 height=200>
+
 ### [gpt2](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1170_LeeHakYoung/dkt/model.py#L776)
 
 오직 앞에 나오는 sequence 데이터들만 사용하여 학습을 진행하기 위한 transformer 모델입니다.
 Huggingface 에서 GPT-2 모델의 구조만을 가져와 사용하였으며, GPT의 architecture는 아래의 그림과 같습니다.
 
 <img src="https://user-images.githubusercontent.com/28282381/122216144-00231b00-cee7-11eb-9460-d214b3ae6ff5.png" width=200 height=200>
+
 ### [custom last query](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1117_ShinChanHo/code/dkt/model.py#L723)
 
 Kagle Riiid 대회 1등 모델인 Last Query 모델에서 착안하였습니다. 
