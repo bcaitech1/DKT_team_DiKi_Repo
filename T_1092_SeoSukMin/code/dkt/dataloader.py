@@ -346,7 +346,6 @@ class DKTDatasetTrain(torch.utils.data.Dataset):
                 right = int((seq_len - left - 160)**random.random())
                 # right = int((seq_len - left - 80) * random.random())
 
-
                 # 잘린 data
                 seq_len = seq_len - left - right
                 for i in range(len(row)):
