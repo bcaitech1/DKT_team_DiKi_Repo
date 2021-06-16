@@ -57,7 +57,7 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 ### Augmentation
 
 - Sliding window
-- Random Sequence Length Crop
+- [Random Sequence Length Crop](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1092_SeoSukMin/code/dkt/dataloader.py#L340)
 
 ## Model Architectures
 
