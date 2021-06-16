@@ -43,6 +43,8 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 
 ![047c8d8e-5d30-4d5a-8afd-d72a254c6318](https://user-images.githubusercontent.com/59329586/122188993-7dd92d80-cecb-11eb-9e3d-53bec5db329d.png)
 
+---
+
 ## Task에서 직면한 문제 및 해결 방안
 
 - **문제1)** 주어진 데이터의 feature와 user수 부족
@@ -66,6 +68,7 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 
 **→ 이러한 문제들을 Feature / Data Augmentation / Model / Loss / Ensemble 5가지 관점으로 접근**
 
+---
 
 ### Augmentation
 
@@ -73,6 +76,8 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
   일정간격으로 Sequence length를 Shift해서 데이터를 증강합니다
 - [Random Sequence Length Crop](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/db3aead0858f1042240b11434f693ecd26361945/T_1092_SeoSukMin/code/dkt/dataloader.py#L340)  
   일정확률로 Sequence Length를 축소 및 Shift시킵니다
+
+---
 
 ## Model Architectures
 
