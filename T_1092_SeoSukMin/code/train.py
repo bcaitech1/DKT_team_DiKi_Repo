@@ -6,6 +6,8 @@ import torch
 from dkt.utils import setSeeds
 import random
 import wandb
+import pandas as pd
+
 def main(args):
     wandb.login()
     
@@ -16,8 +18,15 @@ def main(args):
     # user split for validation
     args.train_split = True
     args.validation = False
-    args.all_user = set(range(7442))
-    args.val_user = random.sample(args.all_user, int(7442/5))
+    # args.fold = 0
+    csv_file_path = os.path.join(args.data_dir, args.file_name_val)
+    df = pd.read_csv(csv_file_path, parse_dates=['Timestamp'])
+    args.all_user = df['userID'].unique().tolist()
+    args.val_user = args.all_user[int(len(args.all_user)/5)*args.fold : int(len(args.all_user)/5)*(args.fold+1)]
+
+    # args.all_user = set(range(7442))
+    # # args.val_user = random.sample(args.all_user, int(7442/5))
+    # args.val_user = range(int(7442/5) * args.fold, int(7442/5) * (args.fold+1))
 
     preprocess = Preprocess(args)
     preprocess.load_train_data(args.file_name)

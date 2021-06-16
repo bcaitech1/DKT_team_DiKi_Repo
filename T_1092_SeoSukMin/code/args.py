@@ -17,21 +17,22 @@ def parse_args(mode='train'):
     # parser.add_argument('--file_name', default='train_test_droplast_data.csv', type=str, help='train file name')
     parser.add_argument('--file_name', default='train_test_nominus.csv', type=str, help='train file name')
     parser.add_argument('--file_name_val', default='train_data_T.csv', type=str, help='train file name')
+    parser.add_argument('--fold', default=0, type=int, help='validation split fold 20%')
     
     parser.add_argument('--model_dir', default='models/', type=str, help='model directory')
     # parser.add_argument('--model_name', default='lstm.pt', type=str, help='model file name')
     parser.add_argument('--model_name', default='gpt2.pt', type=str, help='model file name')
     # parser.add_argument('--model_name', default='lstm_attn.pt', type=str, help='model file name')
 
-    parser.add_argument('--name', default='gpt2_All_Fe14_Hi64_SQ128_lossAll_cutaugR01_kfoldR', type=str, help='model file name')
+    parser.add_argument('--name', default='gpt2_All_Fe14_Hi64_SQ200_lossAll_cutaugRShort_V2kfold0', type=str, help='model file name')
     # parser.add_argument('--name', default='bert_seqeunce20', type=str, help='model file name')
     # parser.add_argument('--name', default='lstm_attn', type=str, help='model file name')
 
     parser.add_argument('--output_dir', default='output/', type=str, help='output directory')
     parser.add_argument('--test_file_name', default='test_data_T.csv', type=str, help='test file name')
     
-    parser.add_argument('--max_seq_len', default=128, type=int, help='max sequence length')
-    parser.add_argument('--num_workers', default=1, type=int, help='number of workers')
+    parser.add_argument('--max_seq_len', default=200, type=int, help='max sequence length')
+    parser.add_argument('--num_workers', default=4, type=int, help='number of workers')
 
     # 모델
     # parser.add_argument('--hidden_dim', default=64, type=int, help='hidden dimension size')
@@ -49,7 +50,7 @@ def parse_args(mode='train'):
     parser.add_argument('--n_epochs', default=400, type=int, help='number of epochs')
     parser.add_argument('--batch_size', default=64, type=int, help='batch size')
     # parser.add_argument('--batch_size', default=1024, type=int, help='batch size')
-    parser.add_argument('--lr', default=0.0001, type=float, help='learning rate')
+    parser.add_argument('--lr', default=1e-4, type=float, help='learning rate')
     # parser.add_argument('--lr', default=1e-5, type=float, help='learning rate')
     # parser.add_argument('--lr', default=1e-8, type=float, help='learning rate')
     parser.add_argument('--clip_grad', default=10, type=int, help='clip grad')
