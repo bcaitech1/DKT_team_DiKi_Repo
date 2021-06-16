@@ -66,7 +66,7 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 - [bert](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1190_JeongJiYoung/dkt/model.py#L14)
 - [gpt2](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1170_LeeHakYoung/dkt/model.py#L776)
 - [custom last query](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/19f7e82bf5aab8d3b1ea5652d6227d3d0ad28f77/T_1117_ShinChanHo/code/dkt/model.py#L723)
-
+![image](https://user-images.githubusercontent.com/52587290/122212631-08795700-cee3-11eb-96a8-0dec6b949e3a.png)
 
 ### 최종 리더보드 점수
 
