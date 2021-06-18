@@ -51,22 +51,26 @@ DKT는 주어진 마지막 문제를 맞았는지 틀렸는지로 분류하는 �
 - **문제1)** 주어진 데이터의 feature와 user수 부족
 
   **해결 방안 : [Feature engineering](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/dataloader.py#L83)**
+
 - **문제2)** Max Sequence Length 이상 Data 손실
 
   **해결 방안 : [Data Augmentation](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/dataloader.py#L339)**
-- **문제3)** 앙상블 효과를 올리기 위해서는 다양한 모델 사용이 필요
 
-  **해결 방안 : [다양한 Model 학습](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/model.py)**
-- **문제4)** Model의 output 중 마지막 Sequence만 학습에 사용됨 
+- **문제3)** Model의 output 중 마지막 Sequence만 학습에 사용됨 
 
   **해결 방안 : [Loss 재 정의](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/trainer.py#L301)**
-- **문제5)** AUC Metric 점수 극대화를 위한 Ensemble 기법 필요
 
-  **해결 방안 : Custom Ensemble**
-- **문제6)** Validation에 사용된 데이터 학습 필요
+- **문제4)** 앙상블 효과를 올리기 위해서는 다양한 모델 사용이 필요
+
+  **해결 방안 : [다양한 Model 학습](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/main/T_1170_LeeHakYoung/dkt/model.py)**
+
+- **문제5)** Validation에 사용된 데이터 학습 필요
 
   **해결 방안 : [K-Fold CV](https://github.com/bcaitech1/DKT_team_DiKi_Repo/blob/04a0235fe86e9eb04aa3372d71c34a41229bfc09/T_1190_JeongJiYoung/train.py#L30)**
 
+- **문제6)** AUC Metric 점수 극대화를 위한 Ensemble 기법 필요
+
+  **해결 방안 : Custom Ensemble**
 
 ---
 
